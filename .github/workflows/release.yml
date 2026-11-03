@@ -1,6 +1,5 @@
 name: Release
 
-# 打 tag 的时候自动触发，比如 v1.0.0
 on:
   push:
     tags:
@@ -10,6 +9,8 @@ jobs:
   # 打 macOS 包
   build-mac:
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -22,14 +23,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and publish for macOS
-        run: npx electron-builder --mac --publish always
+      - name: Build for macOS
+        run: npx electron-builder --mac --publish never
+
+      - name: Upload dmg to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # 打 Windows 包
   build-windows:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +51,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and publish for Windows
-        run: npx electron-builder --win --publish always
+      - name: Build for Windows
+        run: npx electron-builder --win --publish never
+
+      - name: Upload exe to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.exe
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
