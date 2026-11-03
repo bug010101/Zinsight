@@ -1,0 +1,69 @@
+{
+  "name": "Zinsight",
+  "productName": "Zinsight",
+  "version": "1.0.8",
+  "description": "轻量级个人记账桌面应用",
+  "license": "MIT",
+  "author": "zhoujin",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder --mac",
+    "build:dmg": "electron-builder --mac dmg"
+  },
+  "build": {
+    "appId": "com.zinsight.app",
+    "productName": "Zinsight",
+    "directories": {
+      "output": "dist"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "bug010101",
+        "repo": "Zinsight"
+      }
+    ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "assets/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "icon": "assets/dock-icon.png",
+      "target": [
+        "dmg",
+        "dir"
+      ],
+      "identity": null
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "dmg": {
+      "title": "Zinsight ${version}",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.18.0"
+  }
+}
