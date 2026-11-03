@@ -69,6 +69,23 @@ npm run dev
 
 ---
 
+## 安装 Release 版本
+
+从 [Releases](https://github.com/bug010101/Zinsight/releases) 下载 `.dmg` 文件，双击打开后把 Zinsight 拖到「应用程序」文件夹。
+
+> ⚠️ **首次打开提示「已损坏」怎么办？**
+>
+> 因为应用没有苹果开发者签名，从浏览器下载后 macOS 会自动拦截。
+>
+> 打开终端，运行下面这行命令即可：
+> ```bash
+> xattr -cr /Applications/Zinsight.app
+> ```
+>
+> 然后就能正常打开了。
+
+---
+
 ## 项目结构
 
 ```

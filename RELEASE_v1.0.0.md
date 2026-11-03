@@ -1,4 +1,4 @@
-# Zinsight v1.0.0
+# Zinsight v1.0.10
 
 轻量级个人记账桌面应用，专注于「本月还能花多少钱」。
 
@@ -20,7 +20,7 @@
 
 ## 📦 下载
 
-- `Zinsight-1.0.0-arm64.dmg` - Apple Silicon (M 系列芯片)
+- `Zinsight-1.0.10-arm64.dmg` - Apple Silicon (M 系列芯片)
 
 ---
 
