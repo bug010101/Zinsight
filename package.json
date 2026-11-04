@@ -4,7 +4,10 @@
   "version": "1.0.10",
   "description": "轻量级个人记账桌面应用",
   "license": "MIT",
-  "author": "zhoujin",
+  "author": {
+    "name": "zhoujin",
+    "email": "zhoujin@users.noreply.github.com"
+  },
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -52,7 +55,8 @@
       "target": [
         "deb"
       ],
-      "category": "Utility"
+      "category": "Utility",
+      "maintainer": "zhoujin <zhoujin@users.noreply.github.com>"
     },
     "dmg": {
       "title": "Zinsight ${version}",
