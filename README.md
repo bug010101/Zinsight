@@ -80,6 +80,24 @@ npm start
 
 ---
 
+## 下载安装
+
+从 [GitHub Releases](https://github.com/bug010101/Zinsight/releases) 下载对应平台的安装包。
+
+### macOS 安装
+
+1. 下载 `.dmg` 文件，打开后拖到「应用程序」文件夹
+2. 因为应用没有苹果开发者签名，首次打开会被 Gatekeeper 拦截
+3. 打开「终端」，执行下面这行命令解除隔离：
+
+```bash
+xattr -cr /Applications/Zinsight.app
+```
+
+4. 然后就能正常打开了。
+
+---
+
 ## 使用指南
 
 ### 快捷键
