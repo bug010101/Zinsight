@@ -10,7 +10,9 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "build": "electron-builder --mac",
-    "build:dmg": "electron-builder --mac dmg"
+    "build:dmg": "electron-builder --mac dmg",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
   },
   "build": {
     "appId": "com.zinsight.app",
@@ -27,8 +29,7 @@
     ],
     "files": [
       "main.js",
-      "preload.js",
-      "index.html",
+      "src/**/*",
       "assets/**/*"
     ],
     "mac": {
@@ -45,6 +46,13 @@
       "target": [
         "nsis"
       ]
+    },
+    "linux": {
+      "icon": "assets/dock-icon.png",
+      "target": [
+        "deb"
+      ],
+      "category": "Utility"
     },
     "dmg": {
       "title": "Zinsight ${version}",
@@ -63,7 +71,7 @@
     }
   },
   "devDependencies": {
-    "electron": "^33.0.0",
+    "electron": "^33.4.11",
     "electron-builder": "^26.18.0"
   }
 }
