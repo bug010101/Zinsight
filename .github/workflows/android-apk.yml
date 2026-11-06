@@ -66,13 +66,45 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
 
+      # ubuntu-latest 镜像自带 Android SDK，不再依赖第三方 setup action：
+      # 它会在接受许可时打印协议全文并因交互输入失败，且旧 action 被强制跑在 Node 24 上
       - name: 准备 Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
+          fi
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(command -v sdkmanager || true)"
+          fi
+          if [ -z "$SDKMANAGER" ] || [ ! -x "$SDKMANAGER" ]; then
+            echo "::error::找不到 sdkmanager，SDK_ROOT=$SDK_ROOT"
+            ls -la "$SDK_ROOT" || true
+            exit 1
+          fi
+          echo "ANDROID_HOME=$SDK_ROOT"      >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "SDKMANAGER=$SDKMANAGER"     >> "$GITHUB_ENV"
+          echo "sdkmanager: $SDKMANAGER"
+
+          # 直接写入公开的 license hash，绕开 sdkmanager --licenses 的交互式 y/N
+          mkdir -p "$SDK_ROOT/licenses"
+          printf '%s\n' '8933bad161af4178b1185d1a37fbf41ea5269c55' \
+                        'd56f5187479451eabf01fb78af6dfcb131a6481e' \
+            > "$SDK_ROOT/licenses/android-sdk-license"
+          printf '%s\n' '84831b9409646a918e305bbebab6c9c91394bd58f' \
+            > "$SDK_ROOT/licenses/android-sdk-preview-license"
 
       - name: 安装 Android SDK 组件
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platform-tools" "platforms;android-${{ env.COMPILE_SDK }}" "build-tools;${{ env.BUILD_TOOLS }}"
+          # 用镜像自带的 JDK 17 跑 sdkmanager（部分旧版 cmdline-tools 在 JDK 21 下会报错）；
+          # 后面的 Gradle 编译仍使用 setup-java 装的 JDK 21
+          SDK_JAVA="${JAVA_HOME_17_X64:-$JAVA_HOME}"
+          JAVA_HOME="$SDK_JAVA" "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-${{ env.COMPILE_SDK }}" \
+            "build-tools;${{ env.BUILD_TOOLS }}"
 
       - name: 安装依赖
         run: npm ci --no-audit --no-fund
