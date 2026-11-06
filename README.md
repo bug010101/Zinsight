@@ -1,6 +1,6 @@
 # Zinsight
 
-轻量级个人记账桌面应用，基于 Electron 开发。专注于「本月还能花多少钱」，支持预算管理、收支统计、AI 分析，数据完全本地存储。
+轻量级个人记账应用。一套逻辑、两种外壳：**桌面端（Electron）** + **安卓端（Capacitor）**。专注于「本月还能花多少钱」，支持预算管理、收支统计、AI 分析，数据完全本地存储。
 
 ---
 
@@ -8,7 +8,9 @@
 
 - [功能特性](#功能特性)
 - [快速开始](#快速开始)
+- [下载安装](#下载安装)
 - [使用指南](#使用指南)
+- [安卓版（APK）](#安卓版apk)
 - [项目结构](#项目结构)
 - [打包发布](#打包发布)
 - [技术架构](#技术架构)
@@ -53,13 +55,21 @@
 - **窗口置顶 / 全屏**：macOS 原生体验
 - **多平台**：支持 macOS / Windows / Linux
 
+### 安卓端
+- **同一套功能**：看板、流水、统计、AI 分析、设置全都在
+- **手机布局**：顶部标题栏 + 底部 5 个页签 + 底部弹层记账
+- **触控友好**：44px 以上点击区、分类用 chips 点选、数字键盘输入
+- **系统分享导出**：CSV / JSON 直接存到手机或发到微信、邮箱
+- **同源数据**：和桌面端使用同一份记账逻辑，算出来的数一模一样
+
 ---
 
 ## 快速开始
 
 ### 环境要求
-- Node.js >= 16
+- Node.js >= 22（Capacitor 8 的要求；只跑桌面端 16+ 也行）
 - npm >= 8
+- 安卓打包不需要本地环境，交给 GitHub Actions
 
 ### 安装运行
 
@@ -95,6 +105,16 @@ xattr -cr /Applications/Zinsight.app
 ```
 
 4. 然后就能正常打开了。
+
+### 安卓安装（APK）
+
+1. 打开仓库的 **Actions → Android APK**，取最新一次 `Zinsight-x.y.z-android.apk`
+   （也可以从 [Releases](https://github.com/bug010101/Zinsight/releases) 直接下）
+2. 把 APK 传到手机（微信文件传输助手 / 数据线 / 网盘都行）
+3. 点开安装，系统提示「未知来源应用」时允许即可
+4. 这个包用 debug 签名，个人自用、侧载安装完全没问题；上架应用商店才需要正式签名
+
+> 打包在 GitHub 的机器上完成，本地不用装 Android Studio、SDK 或 JDK。
 
 ---
 
@@ -143,13 +163,57 @@ date,type,category,amount,note,include_in_balance
 
 ---
 
+## 安卓版（APK）
+
+安卓端不是把桌面窗口塞进手机，而是**同一套业务逻辑 + 另写一层手机 UI**：
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  桌面端：src/renderer/index.html   （Electron 窗口）      │
+│  安卓端：src/renderer/mobile/      （Capacitor WebView）  │
+│              ↓ 两边共用 ↓                                 │
+│  src/renderer/shared/ledger-core.js                       │
+│  预算/余额/分类统计/趋势/CSV 编解码 —— 纯函数，无平台依赖 │
+└──────────────────────────────────────────────────────────┘
+```
+
+原生能力走 `src/renderer/mobile/app.js` 里的「桥」：
+
+| 能力 | 桌面端 | 安卓端 |
+|---|---|---|
+| 数据存储 | `userData/data/*.json` | App 私有目录 `files/zinsight/*.json` |
+| 导出文件 | 系统「另存为」对话框 | 写缓存 + 系统分享面板（可存到手机/发微信） |
+| 导入 CSV | 文件选择框 | 文件选择 + 粘贴文本双通道 |
+| AI 请求 | 主进程 fetch（无跨域） | `CapacitorHttp` 原生请求（绕过 WebView 跨域） |
+
+样式按 Android（Material 3）重做：底部导航、44px 触控区、底部弹层记账、分类 chips、Snackbar 提示、自定义确认框（WebView 的 `alert` 不可靠，所以全部自己实现）。
+
+### 本地跑安卓端（可选）
+
+CI 打包用的是 `@capacitor/cli` 的标准流程，本地想调试也可以，但**需要装 Android Studio**，不装就只用 CI：
+
+```bash
+npm install
+npm run build:www      # 把移动端页面打进 www/
+npm run android:init   # 生成 android/ 原生工程 + 换图标
+npm run android:open   # 用 Android Studio 打开
+```
+
+改完 `src/renderer/mobile/` 里的代码后，执行 `npm run android:sync` 同步进原生工程。
+
+> 浏览器里预览移动端页面：`npm run build:www` 后用任意静态服务器打开 `www/`，
+> 会自动降级成 localStorage 存储，看 UI 足够了。
+
+---
+
 ## 项目结构
 
 ```
 Zinsight/
 ├── main.js                    # 主进程入口（只做初始化）
+├── capacitor.config.json      # 安卓壳配置（appId / webDir）
 ├── src/
-│   ├── main/                  # 主进程代码
+│   ├── main/                  # 主进程代码（桌面端）
 │   │   ├── window.js          # 窗口管理 + 菜单栏
 │   │   ├── data.js            # 数据存储读写
 │   │   ├── ipc.js             # IPC 通信 + 导入导出
@@ -159,17 +223,31 @@ Zinsight/
 │   │       ├── mac.js         # macOS 专属
 │   │       ├── windows.js     # Windows 专属
 │   │       └── linux.js       # Linux 专属
-│   └── renderer/              # 渲染进程（UI）
-│       └── index.html         # 全部界面
+│   └── renderer/
+│       ├── index.html         # 桌面端界面（全部 UI + 逻辑）
+│       ├── shared/
+│       │   └── ledger-core.js # ★ 两端共用的计算内核（纯函数）
+│       └── mobile/            # 安卓端界面
+│           ├── index.html     # 结构（AppBar / 5 个视图 / 底部弹层）
+│           ├── styles.css     # Material 3 风格样式
+│           └── app.js         # 交互逻辑 + 原生能力桥接
+├── scripts/
+│   ├── build-www.js           # 组装 www/（esbuild 打包 + 拷贝资源）
+│   ├── android-icons.js       # 把启动图标铺进原生工程
+│   └── test-core.js           # 逻辑内核自测（node 直接跑）
+├── resources/android/         # 安卓启动图标（各密度）
 ├── assets/                    # 图标资源
-│   ├── dock-icon.png          # Dock / 任务栏图标
+│   ├── dock-icon.png          # Dock / 任务栏图标（1024，安卓图标源）
 │   ├── tray-final.png         # macOS 菜单栏图标
 │   └── icon.ico               # Windows 图标
+├── www/                       # 安卓 Web 产物（构建生成，不入库）
+├── android/                   # 安卓原生工程（构建生成，不入库）
 ├── data/                      # 数据目录（自动生成）
 │   ├── ledger.json            # 账单数据
 │   └── config.json            # 配置（AI Key 等）
-└── .github/workflows/         # GitHub Actions
-    └── release.yml            # 自动打包发布
+└── .github/workflows/
+    ├── release.yml            # 桌面三平台自动打包
+    └── android-apk.yml        # 安卓 APK 自动打包
 ```
 
 ---
@@ -222,6 +300,23 @@ git push origin v1.0.0
 - macOS → `.dmg`
 - Windows → `.exe`
 - Linux → `.deb`
+- Android → `.apk`
+
+### 安卓 APK 打包
+
+APK 由 `.github/workflows/android-apk.yml` 在 GitHub 的机器上编译，**本地什么都不用装**。
+
+两种触发方式：
+
+| 方式 | 操作 | 结果 |
+|---|---|---|
+| 打 tag | `git tag v1.2.0 && git push origin v1.2.0` | 出 APK 并自动挂到 Release |
+| 手动 | Actions → Android APK → Run workflow | 出 APK 存在 Artifact，保留 30 天 |
+
+流程是标准 Capacitor 三步：`build:www`（打包页面）→ `cap add android`（生成原生工程）→ `gradlew assembleDebug`（出 APK）。
+中间会跑一次 `npm run test:core`，逻辑算错就直接失败，不会产出一个坏包。
+
+> **想改成正式签名的 release 包**：在仓库 Secrets 里放 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`，再在 workflow 里加一步解出 keystore 并配 `signingConfigs`，`assembleDebug` 换成 `assembleRelease` 即可。
 
 ---
 
@@ -236,17 +331,21 @@ git push origin v1.0.0
 | **数据层** | `src/main/data.js` | 数据读写、文件存储 |
 | **通信层** | `src/main/ipc.js` | 进程间通信、导入导出 |
 | **平台层** | `src/main/platforms/` | 各平台专属逻辑 |
-| **视图层** | `src/renderer/` | UI 界面 |
+| **逻辑层** | `src/renderer/shared/ledger-core.js` | 两端共用的计算内核（纯函数） |
+| **视图层** | `src/renderer/index.html` | 桌面端 UI |
+| **移动视图层** | `src/renderer/mobile/` | 安卓端 UI + 原生能力桥接 |
 
 新增功能只需在对应层级加文件，不用动其他层。
+改计算逻辑只动 `ledger-core.js`，两端同时生效（桌面端的同名逻辑保持原样，行为一致）。
 
 ### 技术栈
 
 - **Electron 33** - 桌面应用框架
+- **Capacitor 8** - 把同一份 Web 页面装进安卓原生壳，产出 APK
 - **原生 HTML / CSS / JavaScript** - 无前端框架，轻量快速
 - **JSON 文件存储** - 本地数据库，零依赖
-- **CommonJS 模块** - 主进程模块系统
-- **ES6+ 语法** - 箭头函数、模板字符串、解构赋值等
+- **CommonJS / ESM** - 主进程用 CommonJS，移动端用 ESM 由 esbuild 打包
+- **esbuild** - 只做一件事：把移动端页面和依赖打成一个 IIFE 文件
 
 ### 数据存储路径
 
@@ -256,6 +355,7 @@ git push origin v1.0.0
 | macOS 打包后 | `~/Library/Application Support/Zinsight/data/` |
 | Windows 打包后 | `%APPDATA%/Zinsight/data/` |
 | Linux 打包后 | `~/.config/Zinsight/data/` |
+| 安卓 | App 私有目录 `files/zinsight/`（卸载即清除，注意先导出备份） |
 
 ---
 

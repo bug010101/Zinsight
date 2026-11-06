@@ -1,0 +1,17 @@
+{
+  "appId": "com.zinsight.app",
+  "appName": "Zinsight",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#f2f4f8",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover",
+      "style": "LIGHT",
+      "hidden": false
+    }
+  }
+}

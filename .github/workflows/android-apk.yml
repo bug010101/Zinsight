@@ -1,0 +1,139 @@
+name: Android APK
+
+# ============================================================================
+# 安卓安装包（APK）打包工作流
+#
+# 触发方式两种：
+#   1) 打 tag（v1.2.0）→ 自动打包并挂到 GitHub Release
+#   2) 手动触发（Actions 页面点 Run workflow）→ 只产出 Artifact，方便随时出包
+#
+# 产物是 debug 签名的 APK：
+#   - 可以直接安装到手机关闭「纯净模式 / 未知来源」后使用
+#   - 不需要配置密钥，适合个人自用
+#   - 想换成正式签名的话，见 README「安卓」章节的说明
+# ============================================================================
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: '要打包的分支或 tag（留空则用当前分支）'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+# 同一个 ref 只跑一次，新提交进来时取消旧任务
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'          # Capacitor 8 要求 Node >= 22
+  JAVA_VERSION: '21'          # Capacitor 8 / AGP 8.13 要求 JDK 21
+  COMPILE_SDK: '36'
+  BUILD_TOOLS: '36.0.0'
+
+jobs:
+  build-apk:
+    name: 打包 APK
+    runs-on: ubuntu-latest        # 用 GitHub 的机器，本地不用装 Android SDK
+    timeout-minutes: 45
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: 读取版本号
+        id: version
+        run: echo "value=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+
+      - name: 安装 Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 安装 JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: 准备 Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 安装 Android SDK 组件
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-${{ env.COMPILE_SDK }}" "build-tools;${{ env.BUILD_TOOLS }}"
+
+      - name: 安装依赖
+        run: npm ci --no-audit --no-fund
+        env:
+          # 安卓打包用不到 Electron 的二进制，省掉 100MB 下载
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - name: 逻辑自测
+        run: npm run test:core
+
+      - name: 组装 Web 产物
+        run: npm run build:www
+
+      # Capacitor 会根据 capacitor.config.json 生成原生工程；CI 每次都是干净环境
+      # cap add 内部已自动 copy web 资源 + 注册插件，后面的 sync 是幂等兜底
+      - name: 生成安卓工程
+        run: |
+          npx cap add android
+          node scripts/android-version.js
+
+      - name: 替换启动图标
+        run: node scripts/android-icons.js
+
+      - name: 同步 Web 资源到安卓工程
+        run: npx cap sync android
+
+      - name: 缓存 Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json', 'capacitor.config.json') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: 编译 APK
+        run: |
+          chmod +x android/gradlew
+          cd android && ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: 整理产物
+        run: |
+          mkdir -p dist-release
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             "dist-release/Zinsight-${{ steps.version.outputs.value }}-android.apk"
+          ls -lh dist-release
+
+      - name: 上传 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Zinsight-android-${{ steps.version.outputs.value }}
+          path: dist-release/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # 打 tag 时同时挂到 Release，和桌面端产物放在一起
+      - name: 挂到 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-release/*.apk
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

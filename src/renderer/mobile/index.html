@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2f4f8">
+<meta name="format-detection" content="telephone=no">
+<title>Zinsight 记账</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ================= 顶部栏 ================= -->
+  <header class="appbar">
+    <div>
+      <div class="appbar-title" id="appbarTitle">看板</div>
+      <div class="appbar-sub" id="appbarSub"></div>
+    </div>
+    <button class="appbar-add" id="btnAdd" aria-label="记一笔">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- ================= 内容 ================= -->
+  <main class="content" id="content">
+
+    <!-- ---------- 看板 ---------- -->
+    <section class="view active" data-view="dashboard">
+      <div class="balance-card" id="balanceCard">
+        <div class="balance-label">本月可用余额</div>
+        <div class="balance-amount"><span class="unit">¥</span><span id="balanceAmount">0.00</span></div>
+        <div class="balance-meta">
+          <div><span>预算</span><strong id="budgetTotal">¥0.00</strong></div>
+          <div><span>已花</span><strong id="spentTotal">¥0.00</strong></div>
+          <div><span>日均可用</span><strong id="dailyAvg">¥0.00</strong></div>
+        </div>
+        <div class="balance-foot">本月还剩 <span id="daysLeft">30</span> 天，别花超了</div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="label">本月支出</div>
+          <div class="value expense" id="monthExpense">¥0.00</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">本月收入</div>
+          <div class="value income" id="monthIncome">¥0.00</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">记录笔数</div>
+          <div class="value" id="monthCount">0 笔</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>分类预算</h3>
+          <button class="text-btn" data-goto="settings">去设置</button>
+        </div>
+        <div id="catBudgetList"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>最近记录</h3>
+          <button class="text-btn" data-goto="records">全部</button>
+        </div>
+        <div class="record-list" id="recentList"></div>
+      </div>
+    </section>
+
+    <!-- ---------- 流水 ---------- -->
+    <section class="view" data-view="records">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/>
+        </svg>
+        <input type="text" id="searchInput" placeholder="搜索备注、分类…">
+      </div>
+      <div class="card">
+        <div class="record-list" id="recordList"></div>
+      </div>
+      <div class="list-footer" id="recordsFooter"></div>
+    </section>
+
+    <!-- ---------- 统计 ---------- -->
+    <section class="view" data-view="stats">
+      <div class="card">
+        <h3>本月分类支出占比</h3>
+        <div id="categoryChart"></div>
+      </div>
+
+      <div class="card">
+        <h3>每日支出趋势</h3>
+        <div class="trend-chart" id="trendChart"></div>
+        <div class="trend-axis"><span>1 日</span><span id="trendAxisEnd">30 日</span></div>
+      </div>
+
+      <div class="card">
+        <h3>近 6 个月支出对比</h3>
+        <div id="monthCompareChart"></div>
+      </div>
+    </section>
+
+    <!-- ---------- AI 分析 ---------- -->
+    <section class="view view-ai" data-view="ai">
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-msg system">配置好 API Key 后，你可以问我任何关于你记账数据的问题</div>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chatInput" placeholder="例如：我这个月餐饮花了多少？" enterkeyhint="send">
+        <button class="chat-send" id="btnSend" aria-label="发送">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 12l16-8-6 16-3-6-7-2z"/>
+          </svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- ---------- 设置 ---------- -->
+    <section class="view" data-view="settings">
+
+      <div class="card">
+        <h3>预算设置</h3>
+        <div class="field">
+          <label>月度总预算（¥）</label>
+          <input type="number" id="setMonthlyBudget" inputmode="decimal" step="0.01" min="0" placeholder="0">
+        </div>
+        <label class="section-title" style="margin-left:0;">分类预算</label>
+        <div id="catBudgetSettings"></div>
+        <button class="btn btn-filled btn-block" id="btnSaveBudget" style="margin-top:10px;">保存预算</button>
+      </div>
+
+      <div class="card">
+        <h3>分类管理</h3>
+        <div class="cat-tags" id="catList"></div>
+        <div class="field-row" style="margin-top:14px;">
+          <input type="text" id="newCatName" placeholder="新分类名称">
+          <button class="btn btn-tonal" id="btnAddCategory" style="flex:0 0 auto;">添加</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>AI 配置</h3>
+        <div class="field">
+          <label>API Base URL</label>
+          <input type="text" id="setAiBaseUrl" placeholder="https://api.deepseek.com/v1/chat/completions" autocapitalize="off" autocorrect="off">
+        </div>
+        <div class="field">
+          <label>API Key</label>
+          <input type="password" id="setAiKey" placeholder="sk-…" autocapitalize="off" autocorrect="off">
+        </div>
+        <div class="field">
+          <label>模型名称</label>
+          <input type="text" id="setAiModel" placeholder="deepseek-chat" autocapitalize="off" autocorrect="off">
+        </div>
+        <button class="btn btn-filled btn-block" id="btnSaveAi">保存 AI 配置</button>
+      </div>
+
+      <div class="card">
+        <h3>数据管理</h3>
+        <button class="btn btn-outline btn-block" id="btnExportAll">导出全部 CSV</button>
+
+        <label class="section-title" style="margin-left:0;">按时间范围导出（机器学习用）</label>
+        <div class="field-row">
+          <div class="field" style="margin-bottom:10px;">
+            <label>开始日期</label>
+            <input type="date" id="exportStartDate">
+          </div>
+          <div class="field" style="margin-bottom:10px;">
+            <label>结束日期</label>
+            <input type="date" id="exportEndDate">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-tonal" id="btnExportRangeCsv">导出 CSV</button>
+          <button class="btn btn-tonal" id="btnExportRangeJson">导出 JSON</button>
+        </div>
+
+        <label class="section-title" style="margin-left:0;">导入 CSV</label>
+        <div class="btn-row">
+          <button class="btn btn-outline" id="btnImportFile">选择文件</button>
+          <button class="btn btn-outline" id="btnImportPaste">粘贴文本</button>
+        </div>
+        <input type="file" id="fileInput" accept=".csv,text/csv,text/comma-separated-values" class="hidden">
+
+        <details style="margin-top:16px;">
+          <summary style="cursor:pointer;font-size:13.5px;color:var(--primary);padding:4px 0;">CSV 格式说明</summary>
+          <div class="hint" style="margin-top:8px;">
+            <p>第一行表头，每条记录一行，英文逗号分隔：</p>
+            <pre>date,type,category,amount,note,include_in_balance
+2026-11-01,expense,餐饮,25.5,午餐,true
+2026-11-02,income,兼职,500,周末兼职,false</pre>
+            <p><code>date</code> 日期 YYYY-MM-DD 必填 · <code>type</code> expense/income 必填 · <code>category</code> 分类名必填 · <code>amount</code> 金额必填 · <code>note</code> 备注可选 · <code>include_in_balance</code> 是否计入可用余额，可选默认 true</p>
+            <p style="margin-top:6px;color:var(--on-surface-dim);">💡 先导出一次 CSV 当模板，照着改最省事。</p>
+          </div>
+        </details>
+
+        <label class="section-title danger" style="margin-left:0;">危险操作</label>
+        <div class="btn-row">
+          <button class="btn btn-danger" id="btnDeleteRange">删除所选时间段</button>
+          <button class="btn btn-danger" id="btnDeleteAll">删除所有记录</button>
+        </div>
+      </div>
+
+      <div class="hint" style="text-align:center;padding:6px 0 20px;" id="versionHint">Zinsight · 数据全部保存在本机</div>
+    </section>
+
+  </main>
+
+  <!-- ================= 底部导航 ================= -->
+  <nav class="bottomnav" id="bottomnav">
+    <button class="nav-btn active" data-view="dashboard">
+      <span class="nav-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+          <rect x="3.5" y="3.5" width="7" height="7" rx="2"/>
+          <rect x="13.5" y="3.5" width="7" height="7" rx="2"/>
+          <rect x="3.5" y="13.5" width="7" height="7" rx="2"/>
+          <rect x="13.5" y="13.5" width="7" height="7" rx="2"/>
+        </svg>
+      </span>
+      <span>看板</span>
+    </button>
+    <button class="nav-btn" data-view="records">
+      <span class="nav-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M4 7h16M4 12h16M4 17h10"/>
+        </svg>
+      </span>
+      <span>流水</span>
+    </button>
+    <button class="nav-btn" data-view="stats">
+      <span class="nav-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M5 20V11M12 20V4M19 20v-6"/>
+        </svg>
+      </span>
+      <span>统计</span>
+    </button>
+    <button class="nav-btn" data-view="ai">
+      <span class="nav-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+          <path d="M12 3.5l1.9 4.9 4.9 1.9-4.9 1.9L12 17.1l-1.9-4.9L5.2 10.3l4.9-1.9z"/>
+          <path d="M18.5 16.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>
+        </svg>
+      </span>
+      <span>AI</span>
+    </button>
+    <button class="nav-btn" data-view="settings">
+      <span class="nav-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <circle cx="12" cy="12" r="3.2"/>
+          <path d="M12 3v2.2M12 18.8V21M4.2 7.5l1.9 1.1M17.9 15.4l1.9 1.1M4.2 16.5l1.9-1.1M17.9 8.6l1.9-1.1"/>
+        </svg>
+      </span>
+      <span>设置</span>
+    </button>
+  </nav>
+
+</div>
+
+<!-- ================= 记账 / 编辑 底部弹层 ================= -->
+<div class="sheet-mask" id="sheetMask"></div>
+<div class="sheet" id="sheet">
+  <div class="grabber"></div>
+  <h3 id="sheetTitle">记一笔</h3>
+
+  <div class="segmented" id="typeSwitch">
+    <button class="seg-btn active" data-type="expense">支出</button>
+    <button class="seg-btn" data-type="income">收入</button>
+  </div>
+
+  <div class="amount-input">
+    <span class="currency">¥</span>
+    <input type="number" id="inputAmount" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+  </div>
+
+  <label class="section-title" style="margin-left:0;">分类</label>
+  <div class="chips" id="categoryChips"></div>
+
+  <div class="field">
+    <label>备注</label>
+    <input type="text" id="inputNote" placeholder="写点什么（可选）" enterkeyhint="done">
+  </div>
+
+  <div class="field">
+    <label>日期</label>
+    <input type="date" id="inputDate">
+  </div>
+
+  <div class="switch-row hidden" id="includeBalanceRow">
+    <span>计入可用余额</span>
+    <label class="switch">
+      <input type="checkbox" id="inputIncludeBalance" checked>
+      <span class="track"></span>
+      <span class="thumb"></span>
+    </label>
+  </div>
+
+  <div class="sheet-actions">
+    <button class="btn btn-outline" id="btnSheetDelete" style="display:none;">删除</button>
+    <button class="btn btn-outline" id="btnSheetCancel">取消</button>
+    <button class="btn btn-filled" id="btnSheetSave">保存</button>
+  </div>
+</div>
+
+<!-- ================= 确认框 ================= -->
+<div class="dialog-mask" id="dialogMask">
+  <div class="dialog">
+    <h3 id="dialogTitle">确认</h3>
+    <p id="dialogText"></p>
+    <div class="dialog-actions">
+      <button id="dialogCancel">取消</button>
+      <button id="dialogOk" class="danger">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 提示条 ================= -->
+<div class="toast" id="toast"></div>
+
+<script src="./app.js"></script>
+</body>
+</html>
