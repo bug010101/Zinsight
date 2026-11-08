@@ -1,0 +1,265 @@
+/* 桌面端 · 基础样式、导航、看板卡片、表单与图表 */
+/* 由 styles.css 按职责拆分而来，顺序由 index.html 保证 */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f5f7;
+    color: #1d1d1f;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* 顶部导航 */
+  .navbar {
+    background: #fff;
+    border-bottom: 1px solid #e5e5ea;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    height: 52px;
+    flex-shrink: 0;
+  }
+  .navbar .logo {
+    font-size: 16px;
+    font-weight: 600;
+    margin-right: 30px;
+  }
+  .nav-tabs { display: flex; gap: 4px; }
+  .nav-tab {
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #6e6e73;
+    transition: all .15s;
+  }
+  .nav-tab:hover { background: #f0f0f5; }
+  .nav-tab.active { background: #0071e3; color: #fff; }
+
+  /* 主内容区 */
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* 余额卡片 */
+  .balance-card {
+    background: linear-gradient(135deg, #0071e3, #4a9eff);
+    color: #fff;
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 16px;
+  }
+  .balance-card.warning { background: linear-gradient(135deg, #ff9500, #ffb340); }
+  .balance-card.danger { background: linear-gradient(135deg, #ff3b30, #ff6960); }
+  .balance-label { font-size: 13px; opacity: .85; margin-bottom: 8px; }
+  .balance-amount { font-size: 42px; font-weight: 700; letter-spacing: -1px; }
+  .balance-amount .yuan { font-size: 22px; font-weight: 400; margin-right: 2px; }
+  .balance-meta {
+    display: flex;
+    gap: 24px;
+    margin-top: 16px;
+    font-size: 13px;
+    opacity: .9;
+  }
+  .balance-meta span { display: flex; align-items: center; gap: 4px; }
+
+  /* 奖励额度卡 */
+  .reward-card {
+    background: linear-gradient(135deg, #6f3fd4, #9d72ff);
+    color: #fff;
+    border-radius: 16px;
+    padding: 22px 28px;
+    margin-bottom: 16px;
+  }
+  .reward-card.over { background: linear-gradient(135deg, #c62828, #ef5350); }
+  .reward-card.idle { background: linear-gradient(135deg, #6e6e73, #9a9aa1); }
+  .reward-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .reward-label { font-size: 13px; opacity: .88; }
+  .reward-tag {
+    font-size: 11px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.22);
+    white-space: nowrap;
+  }
+  .reward-amount { font-size: 32px; font-weight: 700; letter-spacing: -.5px; margin-top: 6px; }
+  .reward-amount .yuan { font-size: 17px; font-weight: 400; margin-right: 2px; }
+  .reward-meta { display: flex; gap: 22px; margin-top: 10px; font-size: 12.5px; opacity: .9; flex-wrap: wrap; }
+  .reward-track {
+    margin-top: 12px;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.25);
+    overflow: hidden;
+  }
+  .reward-fill { height: 100%; width: 0; background: #fff; border-radius: 999px; transition: width .35s; }
+  .reward-hint { margin-top: 10px; font-size: 12px; opacity: .88; }
+
+  /* 统计小卡 */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .stat-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .stat-card .label { font-size: 12px; color: #86868b; margin-bottom: 6px; }
+  .stat-card .value { font-size: 20px; font-weight: 600; }
+  .stat-card .value.income { color: #34c759; }
+  .stat-card .value.expense { color: #ff3b30; }
+  .stat-card .value.reward { color: #6f3fd4; }
+
+  /* 表单 */
+  .form-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .form-card h3 { font-size: 15px; margin-bottom: 14px; }
+  .form-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+  .form-row label { width: 60px; font-size: 13px; color: #86868b; flex-shrink: 0; }
+  .form-row input, .form-row select, .form-row textarea {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border .15s;
+  }
+  .form-row input:focus, .form-row select:focus { border-color: #0071e3; }
+  .type-switch { display: flex; gap: 0; border-radius: 8px; overflow: hidden; border: 1px solid #d2d2d7; }
+  .type-switch button {
+    padding: 8px 20px;
+    border: none;
+    background: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    color: #6e6e73;
+  }
+  .type-switch button.active.expense { background: #ff3b30; color: #fff; }
+  .type-switch button.active.income { background: #34c759; color: #fff; }
+  .type-switch button.active.life { background: #0071e3; color: #fff; }
+  .type-switch button.active.reward { background: #6f3fd4; color: #fff; }
+  .btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-primary { background: #0071e3; color: #fff; }
+  .btn-secondary { background: #e5e5ea; color: #1d1d1f; }
+  .btn-danger { background: #ff3b30; color: #fff; }
+
+  /* 流水列表 */
+  .record-list { background: #fff; border-radius: 12px; overflow: hidden; }
+  .record-item {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid #f0f0f5;
+  }
+  .record-item:last-child { border-bottom: none; }
+  .record-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: #f0f0f5;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    margin-right: 12px;
+    flex-shrink: 0;
+  }
+  .record-info { flex: 1; min-width: 0; }
+  .record-cat { font-size: 14px; font-weight: 500; }
+  .record-note { font-size: 12px; color: #86868b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .record-date { font-size: 12px; color: #86868b; margin-right: 12px; }
+  .record-amount { font-size: 15px; font-weight: 600; min-width: 80px; text-align: right; }
+  .record-amount.expense { color: #ff3b30; }
+  .record-amount.income { color: #34c759; }
+  .record-actions { margin-left: 10px; display: flex; gap: 4px; }
+  .record-actions button {
+    border: none; background: none; cursor: pointer;
+    font-size: 12px; color: #86868b; padding: 4px 6px; border-radius: 4px;
+  }
+  .record-actions button:hover { background: #f0f0f5; color: #ff3b30; }
+
+  /* 搜索框 */
+  .search-bar {
+    padding: 10px 16px;
+    border-bottom: 1px solid #f0f0f5;
+  }
+  .search-bar input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+  }
+
+  /* 图表区 */
+  .chart-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .chart-card h3 { font-size: 15px; margin-bottom: 16px; }
+  .bar-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 13px;
+  }
+  .bar-label { width: 60px; flex-shrink: 0; color: #6e6e73; }
+  .bar-track { flex: 1; height: 20px; background: #f0f0f5; border-radius: 4px; overflow: hidden; margin: 0 10px; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+  .bar-value { width: 80px; text-align: right; font-weight: 500; }
+
+  /* 折线图（CSS模拟） */
+  .trend-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 120px;
+    padding-top: 10px;
+  }
+  .trend-bar {
+    flex: 1;
+    background: #0071e3;
+    border-radius: 3px 3px 0 0;
+    min-height: 2px;
+    position: relative;
+    transition: opacity .15s;
+  }
+  .trend-bar:hover { opacity: .7; }
+  .trend-bar .tip {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1d1d1f;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    margin-bottom: 4px;
+  }
+  .trend-bar:hover .tip { display: block; }

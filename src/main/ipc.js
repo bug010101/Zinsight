@@ -5,10 +5,9 @@
 
 const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
+const Core = require('../renderer/shared/ledger-core.js');
+const AiContext = require('../renderer/shared/ai/index.js');
 const { readData, saveData, readConfig, saveConfig } = require('./data');
-
-/** 生活 / 奖励 两种账户，和 ledger-core 里的约定一致 */
-const bucketLabel = r => (r && r.type === 'expense' && r.bucket === 'reward') ? '奖励' : '生活';
 
 function registerIpc(mainWindow) {
   // 数据读写
@@ -25,7 +24,7 @@ function registerIpc(mainWindow) {
     return { success: true };
   });
 
-  // 导出 CSV
+  // 导出 CSV：格式由共享内核唯一定义，与安卓端「导出全部」输出完全一致
   ipcMain.handle('data:exportCsv', async (event, records) => {
     const result = await dialog.showSaveDialog(mainWindow, {
       title: '导出账单',
@@ -35,65 +34,43 @@ function registerIpc(mainWindow) {
 
     if (result.canceled || !result.filePath) return { success: false, canceled: true };
 
-    const BOM = '\uFEFF';
-    const header = '日期,类型,分类,金额,备注,账户\n';
-    const rows = records.map(r => {
-      const date = r.date || '';
-      const type = r.type === 'income' ? '收入' : '支出';
-      const category = (r.category || '').replace(/,/g, '，');
-      const amount = r.amount || 0;
-      const note = (r.note || '').replace(/,/g, '，').replace(/\n/g, ' ');
-      return `${date},${type},${category},${amount},${note},${bucketLabel(r)}`;
-    }).join('\n');
-
-    fs.writeFileSync(result.filePath, BOM + header + rows, 'utf-8');
+    fs.writeFileSync(result.filePath, Core.buildFullCsv(records), 'utf-8');
     return { success: true, path: result.filePath };
   });
 
   // 按时间范围导出（机器学习用）
   ipcMain.handle('data:exportByRange', async (event, { startDate, endDate, format }) => {
     const data = readData();
-    const filtered = data.records.filter(r => {
-      if (!r.date) return false;
-      return r.date >= startDate && r.date <= endDate;
-    }).sort((a, b) => a.date.localeCompare(b.date));
+    const filtered = data.records.filter(record => {
+      if (!record.date) return false;
+      return record.date >= startDate && record.date <= endDate;
+    }).sort((firstRecord, secondRecord) => firstRecord.date.localeCompare(secondRecord.date));
 
     if (!filtered.length) {
       return { success: false, error: '所选时间范围内没有记录' };
     }
 
-    const ext = format === 'json' ? 'json' : 'csv';
+    const extension = format === 'json' ? 'json' : 'csv';
     const result = await dialog.showSaveDialog(mainWindow, {
       title: `导出 ${startDate} 至 ${endDate} 的数据`,
-      defaultPath: `ledger_${startDate}_${endDate}.${ext}`,
-      filters: [{ name: ext.toUpperCase(), extensions: [ext] }]
+      defaultPath: `ledger_${startDate}_${endDate}.${extension}`,
+      filters: [{ name: extension.toUpperCase(), extensions: [extension] }]
     });
 
     if (result.canceled || !result.filePath) return { success: false, canceled: true };
 
-    if (format === 'json') {
-      const payload = {
-        meta: {
-          exportTime: new Date().toISOString(),
-          startDate,
-          endDate,
-          recordCount: filtered.length,
-          budget: data.budget,
-          categories: data.categories
-        },
-        records: filtered
-      };
-      fs.writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf-8');
-    } else {
-      const BOM = '\uFEFF';
-      const header = 'id,date,type,category,amount,note,bucket\n';
-      const rows = filtered.map(r => {
-        const note = (r.note || '').replace(/,/g, '，').replace(/\n/g, ' ').replace(/"/g, "'");
-        const bucket = r.type === 'expense' && r.bucket === 'reward' ? 'reward' : 'life';
-        return `${r.id},"${r.date}","${r.type}","${r.category}",${r.amount},"${note}","${bucket}"`;
-      }).join('\n');
-      fs.writeFileSync(result.filePath, BOM + header + rows, 'utf-8');
-    }
+    // CSV / JSON 的生成同样只走共享内核，避免两端格式慢慢漂移
+    const content = format === 'json'
+      ? Core.buildRangeJson(filtered, {
+        exportTime: new Date().toISOString(),
+        startDate,
+        endDate,
+        recordCount: filtered.length,
+        budget: data.budget,
+        categories: data.categories
+      })
+      : Core.buildRangeCsv(filtered);
+    fs.writeFileSync(result.filePath, content, 'utf-8');
 
     return { success: true, path: result.filePath, count: filtered.length };
   });
@@ -102,9 +79,9 @@ function registerIpc(mainWindow) {
   ipcMain.handle('data:deleteByRange', async (event, { startDate, endDate }) => {
     const data = readData();
     const before = data.records.length;
-    data.records = data.records.filter(r => {
-      if (!r.date) return true;
-      return r.date < startDate || r.date > endDate;
+    data.records = data.records.filter(record => {
+      if (!record.date) return true;
+      return record.date < startDate || record.date > endDate;
     });
     const deleted = before - data.records.length;
     saveData(data);
@@ -131,69 +108,32 @@ function registerIpc(mainWindow) {
     if (result.canceled || !result.filePaths.length) return { success: false, canceled: true };
 
     try {
-      const content = fs.readFileSync(result.filePaths[0], 'utf-8').replace(/^\uFEFF/, '');
-      const lines = content.split('\n').filter(l => l.trim());
-      if (lines.length < 2) return { success: false, error: 'CSV 内容为空' };
-
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      const colIdx = {};
-      headers.forEach((h, i) => {
-        if (h.includes('bucket') || h.includes('account') || h === '账户' || h === '归属') colIdx.bucket = i;
-        else if (h.includes('date') || h === '日期') colIdx.date = i;
-        else if (h.includes('type') || h === '类型') colIdx.type = i;
-        else if (h.includes('category') || h === '分类') colIdx.category = i;
-        else if (h.includes('amount') || h === '金额') colIdx.amount = i;
-        else if (h.includes('note') || h.includes('remark') || h === '备注') colIdx.note = i;
-        else if (h.includes('balance') || h.includes('include')) colIdx.include = i;
-      });
-
-      const records = [];
-      for (let i = 1; i < lines.length; i++) {
-        const parts = [];
-        let current = '';
-        let inQuotes = false;
-        for (const ch of lines[i]) {
-          if (ch === '"') inQuotes = !inQuotes;
-          else if (ch === ',' && !inQuotes) { parts.push(current); current = ''; }
-          else current += ch;
-        }
-        parts.push(current);
-
-        const get = (idx, def = '') => parts[idx] !== undefined ? parts[idx].trim() : def;
-        const typeRaw = get(colIdx.type);
-        const type = typeRaw === '收入' || typeRaw === 'income' ? 'income' : 'expense';
-        const includeRaw = get(colIdx.include, 'true').toLowerCase();
-        const accountRaw = get(colIdx.bucket).toLowerCase();
-
-        records.push({
-          id: 'rec_' + Date.now() + '_import_' + i,
-          date: get(colIdx.date),
-          type,
-          category: get(colIdx.category),
-          amount: parseFloat(get(colIdx.amount)) || 0,
-          note: get(colIdx.note),
-          bucket: type === 'expense' && (accountRaw === 'reward' || accountRaw === '奖励') ? 'reward' : 'life',
-          includeInBalance: includeRaw !== 'false' && includeRaw !== '0',
-          createdAt: new Date().toISOString()
-        });
-      }
-      return { success: true, records };
-    } catch (err) {
-      return { success: false, error: err.message };
+      // 导入解析同样只走共享内核：中英文表头、引号包裹、归属列、坏行跳过
+      // 都由 ledger-core.js 统一处理，避免桌面端与安卓端解析出不同结果。
+      const content = fs.readFileSync(result.filePaths[0], 'utf-8');
+      const parsed = Core.parseCsv(content);
+      if (!parsed.success) return { success: false, error: parsed.error };
+      return { success: true, records: parsed.records };
+    } catch (caughtError) {
+      return { success: false, error: caughtError.message };
     }
   });
 
   // AI 分析
-  ipcMain.handle('ai:chat', async (event, { message, contextData }) => {
+  ipcMain.handle('ai:chat', async (event, { message, contextData, history }) => {
     const config = readConfig();
     if (!config.ai.apiKey || !config.ai.baseUrl) {
-      return { success: false, error: '请先在设置中配置 AI API Key 和 Base URL' };
+      return { success: false, error: '请先在设置中配置 AI API Key 和接口地址' };
     }
+    // 设置页允许只填 base，这里统一补成完整的 chat/completions 端点
+    const url = Core.normalizeAiEndpoint(config.ai.baseUrl);
+    // 视图层已按问题裁剪好上下文；旧结构 / 缺失时由共享模块统一兜底重建，
+    // 空对象表示「测试连接」，保持原样不塞账本数据。
+    const context = AiContext.ensureAiContext(contextData, () => readData(), message);
+    const messages = AiContext.buildAiMessages(context, message, history);
 
     try {
-      const systemPrompt = `你是一个个人记账分析助手。以下是用户的记账数据：\n${JSON.stringify(contextData, null, 2)}\n\n请根据这些数据回答用户的问题，给出简洁有用的分析。用中文回答。`;
-
-      const response = await fetch(config.ai.baseUrl, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -201,19 +141,25 @@ function registerIpc(mainWindow) {
         },
         body: JSON.stringify({
           model: config.ai.model || 'gpt-3.5-turbo',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: message }
-          ],
+          messages,
           temperature: 0.7
         })
       });
 
-      const data = await response.json();
+      const raw = await response.text();
+      if (!response.ok) {
+        return { success: false, error: Core.formatAiError(response.status, raw) };
+      }
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (error) {
+        return { success: false, error: '接口返回的不是 JSON：' + raw.slice(0, 120) };
+      }
       const reply = data.choices?.[0]?.message?.content || '抱歉，没有获取到回复';
       return { success: true, reply };
-    } catch (err) {
-      return { success: false, error: err.message };
+    } catch (caughtError) {
+      return { success: false, error: (caughtError && caughtError.message) || '请求失败' };
     }
   });
 }

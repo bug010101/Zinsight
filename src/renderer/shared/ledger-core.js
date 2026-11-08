@@ -43,55 +43,55 @@
 
   // ========== 日期 ==========
 
-  function pad2(n) {
-    return String(n).padStart(2, '0');
+  function padTwoDigits(number) {
+    return String(number).padStart(2, '0');
   }
 
   /** 2026-11-06 */
-  function todayStr(d) {
-    const date = d || new Date();
-    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+  function todayStr(referenceDate) {
+    const date = referenceDate || new Date();
+    return `${date.getFullYear()}-${padTwoDigits(date.getMonth() + 1)}-${padTwoDigits(date.getDate())}`;
   }
 
   /** 2026-11 */
-  function monthKey(d) {
-    const date = d || new Date();
-    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+  function monthKey(referenceDate) {
+    const date = referenceDate || new Date();
+    return `${date.getFullYear()}-${padTwoDigits(date.getMonth() + 1)}`;
   }
 
   /** 2026-11-01 */
-  function monthStartStr(d) {
-    return monthKey(d) + '-01';
+  function monthStartStr(referenceDate) {
+    return monthKey(referenceDate) + '-01';
   }
 
-  function daysInMonth(d) {
-    const date = d || new Date();
+  function daysInMonth(referenceDate) {
+    const date = referenceDate || new Date();
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   }
 
   /** 最近 n 个月，返回 ['2026-06', ..., '2026-11'] */
-  function lastMonths(n, d) {
-    const date = d || new Date();
+  function lastMonths(number, referenceDate) {
+    const date = referenceDate || new Date();
     const out = [];
-    for (let i = n - 1; i >= 0; i--) {
-      out.push(monthKey(new Date(date.getFullYear(), date.getMonth() - i, 1)));
+    for (let index = number - 1; index >= 0; index--) {
+      out.push(monthKey(new Date(date.getFullYear(), date.getMonth() - index, 1)));
     }
     return out;
   }
 
   // ========== 基础工具 ==========
 
-  function formatMoney(n) {
-    const v = Number(n);
-    return (isFinite(v) ? v : 0).toFixed(2);
+  function formatMoney(number) {
+    const value = Number(number);
+    return (isFinite(value) ? value : 0).toFixed(2);
   }
 
-  function uid(prefix) {
+  function generateId(prefix) {
     return `${prefix || 'rec'}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  function catIcon(cat) {
-    return CATEGORY_ICONS[cat] || '📦';
+  function categoryIcon(category) {
+    return CATEGORY_ICONS[category] || '📦';
   }
 
   /** 默认账本数据 */
@@ -114,57 +114,80 @@
     };
   }
 
+  /**
+   * 统一日期为 YYYY-MM-DD。
+   * Excel / Numbers 打开 CSV 再保存时，常把 2026-11-08 写成 2026/11/8；
+   * 而月度筛选、按范围导出/删除都依赖 '2026-11' 前缀做字符串比较，
+   * 斜杠日期会让记录在统计里「凭空消失」。无效值原样返回，不静默丢数据。
+   */
+  function normalizeDate(raw) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (!text) return '';
+    const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/);
+    if (iso) return `${iso[1]}-${padTwoDigits(Number(iso[2]))}-${padTwoDigits(Number(iso[3]))}`;
+    const loose = text.match(/^(\d{4})[/.年](\d{1,2})[/.月](\d{1,2})/);
+    if (loose) {
+      const year = Number(loose[1]);
+      const month = Number(loose[2]);
+      const day = Number(loose[3]);
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return `${year}-${padTwoDigits(month)}-${padTwoDigits(day)}`;
+      }
+    }
+    return text;
+  }
+
   /** 补齐老数据缺失的字段，避免渲染时炸掉 */
   function normalize(data) {
-    const d = data && typeof data === 'object' ? data : {};
+    const source = data && typeof data === 'object' ? data : {};
     const base = defaultData();
     return {
-      records: Array.isArray(d.records) ? d.records.map(normalizeRecord) : [],
+      records: Array.isArray(source.records) ? source.records.map(normalizeRecord) : [],
       budget: {
-        monthly: Number(d.budget && d.budget.monthly) || 0,
-        categories: (d.budget && d.budget.categories) || {}
+        monthly: Number(source.budget && source.budget.monthly) || 0,
+        categories: (source.budget && source.budget.categories) || {}
       },
       reward: {
-        monthly: Number(d.reward && d.reward.monthly) || 0
+        monthly: Number(source.reward && source.reward.monthly) || 0
       },
-      categories: Array.isArray(d.categories) && d.categories.length ? d.categories.slice() : base.categories,
-      createdAt: d.createdAt || base.createdAt
+      categories: Array.isArray(source.categories) && source.categories.length ? source.categories.slice() : base.categories,
+      createdAt: source.createdAt || base.createdAt
     };
   }
 
-  function normalizeRecord(r) {
-    const rec = r || {};
+  function normalizeRecord(record) {
+    const source = record || {};
     return {
-      id: rec.id != null ? rec.id : uid(),
-      type: rec.type === 'income' ? 'income' : 'expense',
-      amount: Number(rec.amount) || 0,
-      category: rec.category || '其他',
-      note: rec.note || '',
-      date: rec.date || todayStr(),
-      bucket: rec.bucket === BUCKET_REWARD ? BUCKET_REWARD : BUCKET_LIFE,
-      includeInBalance: rec.includeInBalance !== false,
-      createdAt: rec.createdAt || new Date().toISOString()
+      id: source.id != null ? source.id : generateId(),
+      type: source.type === 'income' ? 'income' : 'expense',
+      amount: Number(source.amount) || 0,
+      category: source.category || '其他',
+      note: source.note || '',
+      date: normalizeDate(source.date) || todayStr(),
+      bucket: source.bucket === BUCKET_REWARD ? BUCKET_REWARD : BUCKET_LIFE,
+      includeInBalance: source.includeInBalance !== false,
+      createdAt: source.createdAt || new Date().toISOString()
     };
   }
 
   /** 这条记录算不算奖励消费（收入永远是生活账户） */
-  function isReward(r) {
-    return !!r && r.type === 'expense' && r.bucket === BUCKET_REWARD;
+  function isReward(record) {
+    return !!record && record.type === 'expense' && record.bucket === BUCKET_REWARD;
   }
 
-  function bucketOf(r) {
-    return isReward(r) ? BUCKET_REWARD : BUCKET_LIFE;
+  function bucketOf(record) {
+    return isReward(record) ? BUCKET_REWARD : BUCKET_LIFE;
   }
 
-  function bucketLabel(r) {
-    return BUCKET_LABEL[bucketOf(r)] || BUCKET_LABEL.life;
+  function bucketLabel(record) {
+    return BUCKET_LABEL[bucketOf(record)] || BUCKET_LABEL.life;
   }
 
   // ========== 统计 ==========
 
   /** 指定月份的记录 */
   function filterByMonth(records, key) {
-    return records.filter(r => r.date && r.date.startsWith(key));
+    return records.filter(record => record.date && record.date.startsWith(key));
   }
 
   /**
@@ -185,21 +208,21 @@
     const catSpent = {};
     const rewardCatSpent = {};
 
-    (records || []).forEach(r => {
-      const amount = Number(r.amount) || 0;
-      if (r.type === 'expense') {
+    (records || []).forEach(record => {
+      const amount = Number(record.amount) || 0;
+      if (record.type === 'expense') {
         expense += amount;
-        if (isReward(r)) {
+        if (isReward(record)) {
           rewardExpense += amount;
-          rewardCatSpent[r.category] = (rewardCatSpent[r.category] || 0) + amount;
+          rewardCatSpent[record.category] = (rewardCatSpent[record.category] || 0) + amount;
         } else {
           lifeExpense += amount;
-          catSpent[r.category] = (catSpent[r.category] || 0) + amount;
+          catSpent[record.category] = (catSpent[record.category] || 0) + amount;
         }
       } else {
         income += amount;
         // 只有勾选了「计入余额」的收入才算进可用余额
-        if (r.includeInBalance !== false) incomeInBalance += amount;
+        if (record.includeInBalance !== false) incomeInBalance += amount;
       }
     });
 
@@ -249,16 +272,17 @@
     const wantReward = bucket === BUCKET_REWARD;
     const map = {};
     let total = 0;
-    (records || []).forEach(r => {
-      if (r.type !== 'expense') return;
-      if (isReward(r) !== wantReward) return;
-      const amount = Number(r.amount) || 0;
-      map[r.category] = (map[r.category] || 0) + amount;
+    (records || []).forEach(record => {
+      if (record.type !== 'expense') return;
+      if (isReward(record) !== wantReward) return;
+      const amount = Number(record.amount) || 0;
+      map[record.category] = (map[record.category] || 0) + amount;
       total += amount;
     });
     const items = Object.keys(map)
-      .map(cat => ({ cat, sum: map[cat], pct: total > 0 ? (map[cat] / total) * 100 : 0 }))
-      .sort((a, b) => b.sum - a.sum);
+      // 对外的字段名固定为 cat（历史数据契约），局部变量仍用完整单词
+      .map(category => ({ cat: category, sum: map[category], pct: total > 0 ? (map[category] / total) * 100 : 0 }))
+      .sort((firstRecord, secondRecord) => secondRecord.sum - firstRecord.sum);
     return { total, items };
   }
 
@@ -267,12 +291,12 @@
     const wantReward = bucket === BUCKET_REWARD;
     const daily = {};
     const total = days || daysInMonth();
-    for (let i = 1; i <= total; i++) daily[i] = 0;
-    (records || []).forEach(r => {
-      if (r.type !== 'expense' || !r.date) return;
-      if (isReward(r) !== wantReward) return;
-      const day = parseInt(r.date.slice(8, 10), 10);
-      if (day >= 1 && day <= total) daily[day] += Number(r.amount) || 0;
+    for (let index = 1; index <= total; index++) daily[index] = 0;
+    (records || []).forEach(record => {
+      if (record.type !== 'expense' || !record.date) return;
+      if (isReward(record) !== wantReward) return;
+      const day = parseInt(record.date.slice(8, 10), 10);
+      if (day >= 1 && day <= total) daily[day] += Number(record.amount) || 0;
     });
     return daily;
   }
@@ -281,10 +305,10 @@
   function monthSums(records, months, bucket) {
     const wantReward = bucket === BUCKET_REWARD;
     const out = {};
-    months.forEach(m => {
-      out[m] = (records || [])
-        .filter(r => r.type === 'expense' && r.date && r.date.startsWith(m) && isReward(r) === wantReward)
-        .reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    months.forEach(month => {
+      out[month] = (records || [])
+        .filter(record => record.type === 'expense' && record.date && record.date.startsWith(month) && isReward(record) === wantReward)
+        .reduce((total, record) => total + (Number(record.amount) || 0), 0);
     });
     return out;
   }
@@ -292,12 +316,13 @@
   /** 分类预算 vs 实际支出 */
   function categoryBudgetRows(records, budgets) {
     const spent = summarize(records).catSpent;
-    return Object.keys(budgets || {}).map(cat => {
-      const budget = Number(budgets[cat]) || 0;
-      const used = spent[cat] || 0;
+    return Object.keys(budgets || {}).map(category => {
+      const budget = Number(budgets[category]) || 0;
+      const used = spent[category] || 0;
       const pct = budget > 0 ? Math.min((used / budget) * 100, 100) : 0;
       return {
-        cat,
+        // 对外的字段名固定为 cat（历史数据契约），局部变量仍用完整单词
+        cat: category,
         budget,
         used,
         pct,
@@ -314,19 +339,19 @@
    * @param {string} [bucket] 'life' / 'reward' 只看某一边；不传则全部
    */
   function sortRecords(records, keyword, bucket) {
-    const kw = (keyword || '').trim().toLowerCase();
+    const searchTerm = (keyword || '').trim().toLowerCase();
     const want = (bucket === BUCKET_REWARD || bucket === BUCKET_LIFE) ? bucket : null;
     return (records || [])
-      .filter(r => {
-        if (want && bucketOf(r) !== want) return false;
-        if (!kw) return true;
-        return (r.note && String(r.note).toLowerCase().includes(kw)) ||
-          (r.category && String(r.category).toLowerCase().includes(kw));
+      .filter(record => {
+        if (want && bucketOf(record) !== want) return false;
+        if (!searchTerm) return true;
+        return (record.note && String(record.note).toLowerCase().includes(searchTerm)) ||
+          (record.category && String(record.category).toLowerCase().includes(searchTerm));
       })
       .slice()
-      .sort((a, b) => {
-        const timeA = a.createdAt || a.date || '';
-        const timeB = b.createdAt || b.date || '';
+      .sort((firstRecord, secondRecord) => {
+        const timeA = firstRecord.createdAt || firstRecord.date || '';
+        const timeB = secondRecord.createdAt || secondRecord.date || '';
         return String(timeB).localeCompare(String(timeA));
       });
   }
@@ -337,13 +362,13 @@
    *   - 其它日期：MM-DD
    * 之前这里优先用 createdAt，导致改了记账日期后列表还是显示当天，看着像没改成功。
    */
-  function formatRecordTime(r) {
-    const date = r && r.date ? String(r.date) : '';
+  function formatRecordTime(record) {
+    const date = record && record.date ? String(record.date) : '';
     const today = todayStr();
     let time = '';
-    if (r && r.createdAt) {
-      const d = new Date(r.createdAt);
-      if (!isNaN(d.getTime())) time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    if (record && record.createdAt) {
+      const referenceDate = new Date(record.createdAt);
+      if (!isNaN(referenceDate.getTime())) time = `${padTwoDigits(referenceDate.getHours())}:${padTwoDigits(referenceDate.getMinutes())}`;
     }
     if (!date) return time;
     if (date === today) return time ? `今天 ${time}` : '今天';
@@ -352,17 +377,17 @@
 
   // ========== CSV ==========
 
-  function csvCell(v) {
-    return String(v == null ? '' : v).replace(/"/g, "'").replace(/[\r\n]+/g, ' ').replace(/,/g, '，');
+  function formatCsvCell(value) {
+    return String(value == null ? '' : value).replace(/"/g, "'").replace(/[\r\n]+/g, ' ').replace(/,/g, '，');
   }
 
   /** 全量导出（和桌面端「导出全部 CSV」同格式） */
   function buildFullCsv(records) {
     const header = '日期,类型,分类,金额,备注,账户\n';
-    const rows = (records || []).map(r => {
-      const type = r.type === 'income' ? '收入' : '支出';
-      const account = r.type === 'expense' ? bucketLabel(r) : BUCKET_LABEL.life;
-      return `${r.date || ''},${type},${csvCell(r.category)},${Number(r.amount) || 0},${csvCell(r.note)},${account}`;
+    const rows = (records || []).map(record => {
+      const type = record.type === 'income' ? '收入' : '支出';
+      const account = record.type === 'expense' ? bucketLabel(record) : BUCKET_LABEL.life;
+      return `${record.date || ''},${type},${formatCsvCell(record.category)},${Number(record.amount) || 0},${formatCsvCell(record.note)},${account}`;
     }).join('\n');
     return BOM + header + rows;
   }
@@ -370,9 +395,9 @@
   /** 按时间范围导出 CSV（机器学习用，带 id） */
   function buildRangeCsv(records) {
     const header = 'id,date,type,category,amount,note,bucket\n';
-    const rows = (records || []).map(r => {
-      const note = String(r.note || '').replace(/"/g, "'").replace(/[\r\n]+/g, ' ');
-      return `${r.id},"${r.date}","${r.type}","${r.category}",${Number(r.amount) || 0},"${note}","${bucketOf(r)}"`;
+    const rows = (records || []).map(record => {
+      const note = String(record.note || '').replace(/"/g, "'").replace(/[\r\n]+/g, ' ');
+      return `${record.id},"${record.date}","${record.type}","${record.category}",${Number(record.amount) || 0},"${note}","${bucketOf(record)}"`;
     }).join('\n');
     return BOM + header + rows;
   }
@@ -391,9 +416,9 @@
   /** 筛选某个时间范围的记录（升序） */
   function filterByRange(records, startDate, endDate) {
     return records
-      .filter(r => r.date && r.date >= startDate && r.date <= endDate)
+      .filter(record => record.date && record.date >= startDate && record.date <= endDate)
       .slice()
-      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      .sort((firstRecord, secondRecord) => String(firstRecord.date).localeCompare(String(secondRecord.date)));
   }
 
   /**
@@ -403,21 +428,21 @@
    */
   function parseCsv(text) {
     const content = String(text || '').replace(/^\uFEFF/, '');
-    const lines = content.split(/\r?\n/).filter(l => l.trim());
+    const lines = content.split(/\r?\n/).filter(line => line.trim());
     if (lines.length < 2) {
       return { success: false, error: 'CSV 内容为空' };
     }
 
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const headers = lines[0].split(',').map(header => header.trim().toLowerCase());
     const colIdx = {};
-    headers.forEach((h, i) => {
-      if (h.includes('bucket') || h.includes('account') || h === '账户' || h === '归属') colIdx.bucket = i;
-      else if (h.includes('date') || h === '日期') colIdx.date = i;
-      else if (h.includes('type') || h === '类型') colIdx.type = i;
-      else if (h.includes('category') || h === '分类') colIdx.category = i;
-      else if (h.includes('amount') || h === '金额') colIdx.amount = i;
-      else if (h.includes('note') || h.includes('remark') || h === '备注') colIdx.note = i;
-      else if (h.includes('balance') || h.includes('include')) colIdx.include = i;
+    headers.forEach((header, index) => {
+      if (header.includes('bucket') || header.includes('account') || header === '账户' || header === '归属') colIdx.bucket = index;
+      else if (header.includes('date') || header === '日期') colIdx.date = index;
+      else if (header.includes('type') || header === '类型') colIdx.type = index;
+      else if (header.includes('category') || header === '分类') colIdx.category = index;
+      else if (header.includes('amount') || header === '金额') colIdx.amount = index;
+      else if (header.includes('note') || header.includes('remark') || header === '备注') colIdx.note = index;
+      else if (header.includes('balance') || header.includes('include')) colIdx.include = index;
     });
 
     if (colIdx.date === undefined || colIdx.amount === undefined) {
@@ -425,11 +450,11 @@
     }
 
     const records = [];
-    for (let i = 1; i < lines.length; i++) {
+    for (let index = 1; index < lines.length; index++) {
       const parts = [];
       let current = '';
       let inQuotes = false;
-      for (const ch of lines[i]) {
+      for (const ch of lines[index]) {
         if (ch === '"') inQuotes = !inQuotes;
         else if (ch === ',' && !inQuotes) { parts.push(current); current = ''; }
         else current += ch;
@@ -445,8 +470,8 @@
       if (!get(colIdx.date) || !isFinite(amount)) continue;
 
       records.push({
-        id: uid('rec') + '_import_' + i,
-        date: get(colIdx.date),
+        id: generateId('rec') + '_import_' + index,
+        date: normalizeDate(get(colIdx.date)),
         type: typeRaw === '收入' || typeRaw === 'income' ? 'income' : 'expense',
         category: get(colIdx.category),
         amount,
@@ -461,14 +486,57 @@
     return { success: true, records };
   }
 
+  // ========== AI 接口地址 ==========
+
+  /**
+   * 归一化设置页填写的 AI 接口地址。
+   * 允许两种写法：只填 base（https://api.deepseek.com/v1），或填完整的
+   * .../chat/completions。请求前统一成后者；空值原样返回，表示未配置。
+   */
+  function normalizeAiEndpoint(input) {
+    let url = String(input == null ? '' : input).trim();
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    url = url.replace(/\/+$/, '');
+    if (/\/chat\/completions$/i.test(url)) return url;
+    return url + '/chat/completions';
+  }
+
+  /**
+   * 把接口的失败响应变成能看懂的一句话。
+   * 各家错误字段不一样（error.message / error.code / msg / message），
+   * 都不是 JSON 时退回报文片段，避免只显示一个状态码让人无从下手。
+   */
+  function formatAiError(status, body) {
+    const code = status ? `接口返回 ${status}` : '请求失败';
+    const fallback = `${code}，请检查接口地址、Key 和模型名`;
+    let raw = body;
+    if (typeof raw === 'string') {
+      const text = raw.trim();
+      if (!text) return fallback;
+      try { raw = JSON.parse(text); } catch (error) { /* 不是 JSON，按纯文本处理 */ }
+    }
+    let detail = '';
+    if (raw && typeof raw === 'object') {
+      const caughtError = raw.error;
+      detail = (caughtError && typeof caughtError === 'object' && (caughtError.message || caughtError.msg || caughtError.code)) ||
+               (typeof caughtError === 'string' ? caughtError : '') ||
+               raw.message || raw.msg || raw.error_msg || '';
+    } else if (typeof raw === 'string') {
+      detail = raw;
+    }
+    detail = String(detail || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+    return detail ? `${code}：${detail}` : fallback;
+  }
+
   return {
     DEFAULT_CATEGORIES,
     CATEGORY_ICONS,
     BUCKET_LIFE, BUCKET_REWARD, BUCKET_LABEL,
     // 日期
-    todayStr, monthKey, monthStartStr, daysInMonth, lastMonths,
+    todayStr, monthKey, monthStartStr, daysInMonth, lastMonths, normalizeDate,
     // 基础
-    pad2, formatMoney, uid, catIcon, defaultData, defaultConfig, normalize,
+    padTwoDigits, formatMoney, generateId, categoryIcon, defaultData, defaultConfig, normalize,
     isReward, bucketOf, bucketLabel,
     // 统计
     filterByMonth, summarize, balanceOf, rewardBalanceOf, rewardUsedPct, dailyBudget, budgetLevel,
@@ -476,6 +544,8 @@
     // 流水
     sortRecords, formatRecordTime,
     // CSV
-    buildFullCsv, buildRangeCsv, buildRangeJson, filterByRange, parseCsv
+    buildFullCsv, buildRangeCsv, buildRangeJson, filterByRange, parseCsv,
+    // AI 配置
+    normalizeAiEndpoint, formatAiError
   };
 });

@@ -6,7 +6,14 @@
 <meta name="theme-color" content="#f2f4f8">
 <meta name="format-detection" content="telephone=no">
 <title>Zinsight 记账</title>
-<link rel="stylesheet" href="./styles.css">
+<!-- 按职责拆分的样式表，顺序不可颠倒；markdown.css 由 build-www.js 从 shared/ 复制 -->
+<link rel="stylesheet" href="./base.css">
+<link rel="stylesheet" href="./dashboard.css">
+<link rel="stylesheet" href="./components.css">
+<link rel="stylesheet" href="./settings.css">
+<link rel="stylesheet" href="./overlays.css">
+<link rel="stylesheet" href="./responsive.css">
+<link rel="stylesheet" href="./markdown.css">
 </head>
 <body>
 
@@ -181,8 +188,8 @@
       <div class="card">
         <h3>AI 配置</h3>
         <div class="field">
-          <label>API Base URL</label>
-          <input type="text" id="setAiBaseUrl" placeholder="https://api.deepseek.com/v1/chat/completions" autocapitalize="off" autocorrect="off">
+          <label>API 接口地址</label>
+          <input type="text" id="setAiBaseUrl" placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url">
         </div>
         <div class="field">
           <label>API Key</label>
@@ -190,14 +197,24 @@
         </div>
         <div class="field">
           <label>模型名称</label>
-          <input type="text" id="setAiModel" placeholder="deepseek-chat" autocapitalize="off" autocorrect="off">
+          <input type="text" id="setAiModel" placeholder="glm-4.5-air" autocapitalize="off" autocorrect="off" spellcheck="false">
         </div>
-        <button class="btn btn-filled btn-block" id="btnSaveAi">保存 AI 配置</button>
+        <div class="hint" style="margin-bottom:12px;">
+          智谱：<code>https://open.bigmodel.cn/api/paas/v4/chat/completions</code>（模型 <code>glm-4.5-air</code>）<br>
+          DeepSeek：<code>https://api.deepseek.com/v1/chat/completions</code>（模型 <code>deepseek-chat</code>）<br>
+          只填 base 也行，会自动补 <code>/chat/completions</code>。全部留空就是纯离线。
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-filled" id="btnSaveAi">保存 AI 配置</button>
+          <button class="btn btn-tonal" id="btnTestAi">测试连接</button>
+        </div>
+        <div id="aiTestResult" class="ai-test-result" hidden></div>
       </div>
 
       <div class="card">
         <h3>数据管理</h3>
-        <button class="btn btn-outline btn-block" id="btnExportAll">导出全部 CSV</button>
+        <button class="btn btn-outline btn-block" id="btnExportAll">导出全部 CSV 并分享</button>
+        <div class="hint" style="margin:8px 2px 16px;">安卓上会弹出系统分享面板，选微信 / QQ 直接发送，或选「保存到文件」存到手机；浏览器预览则走下载。</div>
 
         <label class="section-title" style="margin-left:0;">按时间范围导出（机器学习用）</label>
         <div class="field-row">
@@ -211,8 +228,8 @@
           </div>
         </div>
         <div class="btn-row">
-          <button class="btn btn-tonal" id="btnExportRangeCsv">导出 CSV</button>
-          <button class="btn btn-tonal" id="btnExportRangeJson">导出 JSON</button>
+          <button class="btn btn-tonal" id="btnExportRangeCsv">分享 CSV</button>
+          <button class="btn btn-tonal" id="btnExportRangeJson">分享 JSON</button>
         </div>
 
         <label class="section-title" style="margin-left:0;">导入 CSV</label>
@@ -220,17 +237,17 @@
           <button class="btn btn-outline" id="btnImportFile">选择文件</button>
           <button class="btn btn-outline" id="btnImportPaste">粘贴文本</button>
         </div>
-        <input type="file" id="fileInput" accept=".csv,text/csv,text/comma-separated-values" class="hidden">
+        <input type="file" id="fileInput" accept=".csv,text/csv,text/comma-separated-values" class="file-input">
 
         <details style="margin-top:16px;">
           <summary style="cursor:pointer;font-size:13.5px;color:var(--primary);padding:4px 0;">CSV 格式说明</summary>
           <div class="hint" style="margin-top:8px;">
             <p>第一行表头，每条记录一行，英文逗号分隔：</p>
-            <pre>date,type,category,amount,note,include_in_balance
-2026-11-01,expense,餐饮,25.5,午餐,true
-2026-11-02,income,兼职,500,周末兼职,false</pre>
-            <p><code>date</code> 日期 YYYY-MM-DD 必填 · <code>type</code> expense/income 必填 · <code>category</code> 分类名必填 · <code>amount</code> 金额必填 · <code>note</code> 备注可选 · <code>include_in_balance</code> 是否计入可用余额，可选默认 true</p>
-            <p style="margin-top:6px;color:var(--on-surface-dim);">💡 先导出一次 CSV 当模板，照着改最省事。</p>
+            <pre>日期,类型,分类,金额,备注,账户
+2026-11-01,支出,餐饮,25.5,午餐,生活
+2026-11-05,支出,娱乐,199,买个新游戏,奖励</pre>
+            <p><code>日期/date</code> YYYY-MM-DD 必填 · <code>类型/type</code> 支出/expense、收入/income · <code>分类/category</code> 必填 · <code>金额/amount</code> 必填 · <code>备注/note</code> 可选 · <code>账户/bucket</code> 生活/life、奖励/reward，不写默认生活</p>
+            <p style="margin-top:6px;color:var(--on-surface-dim);">💡 中英文表头都认；「导出全部 CSV」的文件可直接导回。导入是追加，不会覆盖；选不到文件时可用「粘贴文本」。</p>
           </div>
         </details>
 

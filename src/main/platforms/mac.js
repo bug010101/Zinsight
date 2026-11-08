@@ -19,11 +19,11 @@ function init(ctx) {
   app.setName('Zinsight');
 
   // 设置 Dock 图标
-  const dockIcon = nativeImage.createFromPath(path.join(__dirname, '..', '..', '..', 'assets', 'dock-icon.png'));
+  const dockIcon = nativeImage.createFromPath(path.join(__dirname, '..', '..', '..', 'assets', 'desktop', 'dock-icon.png'));
   app.dock.setIcon(dockIcon);
 
   // 创建托盘图标（菜单栏）
-  const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', '..', 'assets', 'tray-final.png'));
+  const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', '..', 'assets', 'desktop', 'tray-final.png'));
   icon.setTemplateImage(true);  // 模板图标，自动着色
 
   ctx.tray = new Tray(icon);

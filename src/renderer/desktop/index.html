@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>记账本</title>
+<link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="./panels.css">
+<link rel="stylesheet" href="../shared/markdown.css">
+</head>
+<body>
+
+<div class="navbar">
+  <div class="logo">📒 记账本</div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" data-page="dashboard">看板</div>
+    <div class="nav-tab" data-page="records">流水</div>
+    <div class="nav-tab" data-page="stats">统计</div>
+    <div class="nav-tab" data-page="ai">AI 分析</div>
+    <div class="nav-tab" data-page="settings">设置</div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ===== 看板页 ===== -->
+  <div class="page active" id="page-dashboard">
+    <div class="balance-card" id="balanceCard">
+      <div class="balance-label">本月可用余额（<span id="monthLabel"></span>）</div>
+      <div class="balance-amount"><span class="yuan">¥</span><span id="balanceAmount">0.00</span></div>
+      <div class="balance-meta">
+        <span>预算 ¥<span id="budgetTotal">0</span></span>
+        <span>已花 ¥<span id="spentTotal">0</span></span>
+        <span>剩余 <span id="daysLeft">30</span> 天 · 日均 ¥<span id="dailyAvg">0</span></span>
+      </div>
+    </div>
+
+    <div class="reward-card" id="rewardCard">
+      <div class="reward-head">
+        <div class="reward-label">本月奖励额度（<span id="rewardMonthLabel"></span>）</div>
+        <span class="reward-tag" id="rewardTag">奖励自己</span>
+      </div>
+      <div class="reward-amount"><span class="yuan">¥</span><span id="rewardLeft">0.00</span></div>
+      <div class="reward-track"><div class="reward-fill" id="rewardFill"></div></div>
+      <div class="reward-meta">
+        <span>额度 ¥<span id="rewardTotal">0.00</span></span>
+        <span>已奖励 ¥<span id="rewardSpent">0.00</span></span>
+        <span>日均 ¥<span id="rewardDailyAvg">0.00</span></span>
+      </div>
+      <div class="reward-hint" id="rewardHint">奖励消费只扣这份额度，不影响生活余额</div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="label">生活支出</div>
+        <div class="value expense">¥<span id="monthExpense">0</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="label">奖励支出</div>
+        <div class="value reward">¥<span id="monthReward">0</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="label">本月收入</div>
+        <div class="value income">¥<span id="monthIncome">0</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="label">记录笔数</div>
+        <div class="value"><span id="monthCount">0</span> 笔</div>
+      </div>
+    </div>
+
+    <!-- 快速记账 -->
+    <div class="form-card">
+      <h3>快速记一笔</h3>
+      <div class="form-row">
+        <label>类型</label>
+        <div class="type-switch">
+          <button class="active expense js-type" data-type="expense" onclick="setType('expense')">支出</button>
+          <button class="js-type" data-type="income" onclick="setType('income')">收入</button>
+        </div>
+      </div>
+      <div class="form-row" id="bucketRow">
+        <label>归属</label>
+        <div class="type-switch">
+          <button class="active life js-bucket" data-bucket="life" onclick="setBucket('life')">生活消费</button>
+          <button class="js-bucket" data-bucket="reward" onclick="setBucket('reward')">奖励消费</button>
+        </div>
+      </div>
+      <div class="form-row" id="bucketHintRow">
+        <label></label>
+        <span style="font-size:12px;color:#86868b;line-height:1.6;" id="bucketHint">
+          奖励消费只扣奖励额度，不影响生活余额
+        </span>
+      </div>
+      <div class="form-row">
+        <label>金额</label>
+        <input type="number" id="inputAmount" placeholder="0.00" step="0.01" min="0">
+      </div>
+      <div class="form-row">
+        <label>分类</label>
+        <select id="inputCategory"></select>
+      </div>
+      <div class="form-row">
+        <label>备注</label>
+        <input type="text" id="inputNote" placeholder="写点什么（可选）">
+      </div>
+      <div class="form-row">
+        <label>日期</label>
+        <input type="date" id="inputDate">
+      </div>
+      <div class="form-row" id="includeBalanceRow" style="display:none;">
+        <label></label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;width:auto;font-size:13px;color:#6e6e73;">
+          <input type="checkbox" id="inputIncludeBalance" checked style="width:auto;margin:0;">
+          计入可用余额
+        </label>
+      </div>
+      <div class="form-row">
+        <label></label>
+        <button class="btn btn-primary" onclick="addRecord()">记一笔</button>
+      </div>
+    </div>
+
+    <!-- 分类预算概览 -->
+    <div class="chart-card" id="catBudgetCard">
+      <h3>分类预算使用情况</h3>
+      <div id="catBudgetList"></div>
+    </div>
+  </div>
+
+  <!-- ===== 流水页 ===== -->
+  <div class="page" id="page-records">
+    <div class="filter-row">
+      <button class="filter-chip active" data-filter="all" onclick="setRecordFilter('all')">全部</button>
+      <button class="filter-chip" data-filter="life" onclick="setRecordFilter('life')">生活消费</button>
+      <button class="filter-chip reward" data-filter="reward" onclick="setRecordFilter('reward')">奖励消费</button>
+    </div>
+    <div class="search-bar" style="border-radius:12px;margin-bottom:12px;">
+      <input type="text" id="searchInput" placeholder="搜索备注、分类..." oninput="renderRecords()">
+    </div>
+    <div class="record-list" id="recordList"></div>
+  </div>
+
+  <!-- ===== 统计页 ===== -->
+  <div class="page" id="page-stats">
+    <div class="chart-card">
+      <h3>本月分类支出占比</h3>
+      <div id="categoryChart"></div>
+    </div>
+    <div class="chart-card">
+      <h3>每日支出趋势</h3>
+      <div class="trend-chart" id="trendChart"></div>
+    </div>
+    <div class="chart-card">
+      <h3>近 6 个月支出对比</h3>
+      <div id="monthCompareChart"></div>
+    </div>
+    <div class="chart-card">
+      <h3>本月奖励消费分布</h3>
+      <div id="rewardCategoryChart"></div>
+    </div>
+  </div>
+
+  <!-- ===== AI 分析页 ===== -->
+  <div class="page" id="page-ai">
+    <div class="chat-container">
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-msg system">配置好 API Key 后，你可以问我任何关于你记账数据的问题</div>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chatInput" placeholder="例如：我这个月餐饮花了多少？" onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="btn btn-primary" onclick="sendChat()">发送</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 设置页 ===== -->
+  <div class="page" id="page-settings">
+    <div class="setting-group">
+      <h3>预算设置</h3>
+      <div class="setting-row">
+        <label>月度生活预算 (¥)</label>
+        <input type="number" id="setMonthlyBudget" step="0.01" min="0">
+      </div>
+      <div class="setting-row">
+        <label>月度奖励额度 (¥)</label>
+        <input type="number" id="setRewardBudget" step="0.01" min="0">
+      </div>
+      <p class="fb-note" style="margin:-4px 0 12px 120px;">
+        奖励额度每月 1 号自动恢复，只用于「奖励消费」，不占用生活预算。
+      </p>
+      <h3 style="margin-top:16px;">分类预算</h3>
+      <div id="catBudgetSettings"></div>
+      <p class="fb-note" style="margin:-2px 0 12px;">分类预算只统计「生活消费」。</p>
+      <button class="btn btn-primary" onclick="saveBudget()">保存预算</button>
+    </div>
+
+    <div class="setting-group">
+      <h3>分类管理</h3>
+      <div id="catList"></div>
+      <div class="form-row" style="margin-top:10px;">
+        <input type="text" id="newCatName" placeholder="新分类名称">
+        <button class="btn btn-secondary" onclick="addCategory()">添加分类</button>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <h3>AI 配置</h3>
+      <div class="setting-row">
+        <label>API 接口地址</label>
+        <input type="text" id="setAiBaseUrl" placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions">
+      </div>
+      <div class="setting-row">
+        <label>API Key</label>
+        <input type="password" id="setAiKey" placeholder="sk-...">
+      </div>
+      <div class="setting-row">
+        <label>模型名称</label>
+        <input type="text" id="setAiModel" placeholder="glm-4.5-air">
+      </div>
+      <p class="ai-tip">智谱：<code>https://open.bigmodel.cn/api/paas/v4/chat/completions</code>（模型 <code>glm-4.5-air</code>）<br>DeepSeek：<code>https://api.deepseek.com/v1/chat/completions</code>（模型 <code>deepseek-chat</code>）<br>只填 base 也可以，会自动补 <code>/chat/completions</code>。三项全部留空就是纯离线模式。</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="saveAiConfig()">保存 AI 配置</button>
+        <button class="btn btn-secondary" id="btnTestAi" onclick="testAiConfig()">测试连接</button>
+      </div>
+      <div id="aiTestResult" class="ai-test-result" hidden></div>
+    </div>
+
+    <div class="setting-group">
+      <h3>数据管理</h3>
+      <div style="display:flex; gap:10px; margin-bottom:16px;">
+        <button class="btn btn-secondary" onclick="exportCsv()">导出全部 CSV</button>
+        <button class="btn btn-secondary" onclick="importCsv()">导入 CSV</button>
+      </div>
+
+      <h3 style="margin-bottom:12px;">按时间范围导出（机器学习用）</h3>
+      <div class="setting-row">
+        <label>开始日期</label>
+        <input type="date" id="exportStartDate">
+      </div>
+      <div class="setting-row">
+        <label>结束日期</label>
+        <input type="date" id="exportEndDate">
+      </div>
+      <div style="display:flex; gap:10px; margin-top:10px;">
+        <button class="btn btn-primary" onclick="exportByRange('csv')">导出 CSV</button>
+        <button class="btn btn-primary" onclick="exportByRange('json')">导出 JSON</button>
+      </div>
+
+      <details style="margin-top:16px;">
+        <summary style="cursor:pointer;font-size:14px;color:#0071e3;">CSV 导入格式说明</summary>
+        <div style="margin-top:12px;font-size:13px;line-height:1.8;color:#48484a;">
+          <p>第一行是表头，每条记录一行，英文逗号分隔。推荐直接拿「导出全部 CSV」的文件当模板：</p>
+          <pre style="background:#f5f5f7;padding:12px;border-radius:8px;overflow-x:auto;font-size:12px;">日期,类型,分类,金额,备注,账户
+2026-11-01,支出,餐饮,25.5,午餐,生活
+2026-11-05,支出,娱乐,199,买个新游戏,奖励</pre>
+          <p><b>字段说明：</b></p>
+          <p>• <code>日期 / date</code>：日期，格式 YYYY-MM-DD（必填）</p>
+          <p>• <code>类型 / type</code>：<code>支出 / expense</code>、<code>收入 / income</code>（必填）</p>
+          <p>• <code>分类 / category</code>：分类名称，要和系统里的分类一致（必填）</p>
+          <p>• <code>金额 / amount</code>：金额，数字（必填）</p>
+          <p>• <code>备注 / note</code>：备注说明（可选）</p>
+          <p>• <code>账户 / bucket / account / 归属</code>：<code>生活 / life</code>、<code>奖励 / reward</code>（可选，默认生活）</p>
+          <p>• <code>include_in_balance</code>：是否计入可用余额，<code>true</code>/<code>false</code>（可选，默认 true）</p>
+          <p style="color:#86868b;margin-top:8px;">💡 表头中英文都认，两种导出格式（导出全部、按范围导出）也都能直接导回。导入是<b>追加</b>，不会覆盖已有记录。</p>
+        </div>
+      </details>
+
+      <h3 style="margin-top:24px; margin-bottom:12px; color:#ff3b30;">危险操作</h3>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-danger" onclick="deleteByRange()">删除所选时间段数据</button>
+        <button class="btn btn-danger" onclick="deleteAll()">删除所有记录</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 编辑记录弹窗 -->
+<div class="modal-mask" id="editModal">
+  <div class="modal">
+    <h3>编辑记录</h3>
+    <div class="form-row">
+      <label>类型</label>
+      <div class="type-switch">
+        <button class="active expense js-edit-type" data-type="expense" onclick="setEditType('expense')">支出</button>
+        <button class="js-edit-type" data-type="income" onclick="setEditType('income')">收入</button>
+      </div>
+    </div>
+    <div class="form-row" id="editBucketRow">
+      <label>归属</label>
+      <div class="type-switch">
+        <button class="active life js-edit-bucket" data-bucket="life" onclick="setEditBucket('life')">生活消费</button>
+        <button class="js-edit-bucket" data-bucket="reward" onclick="setEditBucket('reward')">奖励消费</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>金额</label>
+      <input type="number" id="editAmount" placeholder="0.00" step="0.01" min="0">
+    </div>
+    <div class="form-row">
+      <label>分类</label>
+      <select id="editCategory"></select>
+    </div>
+    <div class="form-row">
+      <label>备注</label>
+      <input type="text" id="editNote" placeholder="写点什么（可选）">
+    </div>
+    <div class="form-row">
+      <label>日期</label>
+      <input type="date" id="editDate">
+    </div>
+    <div class="form-row" id="editIncludeRow" style="display:none;">
+      <label></label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;width:auto;font-size:13px;color:#6e6e73;">
+        <input type="checkbox" id="editIncludeBalance" checked style="width:auto;margin:0;">
+        计入可用余额
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeEditModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveEdit()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 共享内核（纯函数，两端唯一实现） -->
+<script src="../shared/ledger-core.js"></script>
+<script src="../shared/markdown.js"></script>
+<script src="../shared/ai/intent.js"></script>
+<script src="../shared/ai/context.js"></script>
+<script src="../shared/ai/prompt.js"></script>
+<script src="../shared/ai/index.js"></script>
+<!-- 桌面端按职责拆分的经典脚本：共享全局作用域，顺序不可颠倒 -->
+<script src="./state.js"></script>
+<script src="./views.js"></script>
+<script src="./charts.js"></script>
+<script src="./actions.js"></script>
+<script src="./settings.js"></script>
+<script src="./chat.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

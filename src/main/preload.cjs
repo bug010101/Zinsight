@@ -21,5 +21,5 @@ contextBridge.exposeInMainWorld('ledgerAPI', {
   deleteAll: () => ipcRenderer.invoke('data:deleteAll'),
   importCsv: () => ipcRenderer.invoke('data:importCsv'),
   // AI
-  aiChat: (message, contextData) => ipcRenderer.invoke('ai:chat', { message, contextData })
+  aiChat: (message, contextData, history) => ipcRenderer.invoke('ai:chat', { message, contextData, history })
 });

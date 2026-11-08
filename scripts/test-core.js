@@ -1,27 +1,14 @@
 /**
- * 逻辑内核自测（不依赖任何测试框架）
- * 运行：node scripts/test-core.js
- *
- * 目的：确认安卓端与桌面端共用的一套计算逻辑没有跑偏——
- * 余额、统计、CSV 编解码都按预期工作。
+ * 账本内核 / Markdown / AI 地址自测（不依赖测试框架）
+ * 运行：node scripts/test-core.js（由 npm run test:core 统一调用）
+ * AI 意图、上下文裁剪与提示词在 scripts/test-ai.js。
  */
 
 const assert = require('assert');
 const Core = require('../src/renderer/shared/ledger-core.js');
-
-let passed = 0;
-
-function test(name, fn) {
-  try {
-    fn();
-    passed++;
-    console.log('  ✓ ' + name);
-  } catch (err) {
-    console.error('  ✗ ' + name);
-    console.error('    ' + err.message);
-    process.exitCode = 1;
-  }
-}
+const Markdown = require('../src/renderer/shared/markdown.js');
+const { createRunner } = require('./test-kit.js');
+const { test, done } = createRunner();
 
 const sample = [
   { id: 'a', type: 'expense', amount: 25.5, category: '餐饮', note: '午餐', date: '2026-11-01', includeInBalance: true, createdAt: '2026-11-01T04:00:00.000Z' },
@@ -200,6 +187,34 @@ test('CSV 没有账户列时按生活导入（向后兼容）', () => {
   assert.strictEqual(parsed.records[0].bucket, 'life');
 });
 
+test('normalizeDate 统一斜杠 / 点 / 中文 / ISO 时间写法', () => {
+  assert.strictEqual(Core.normalizeDate('2026/11/8'), '2026-11-08');
+  assert.strictEqual(Core.normalizeDate('2026.11.8'), '2026-11-08');
+  assert.strictEqual(Core.normalizeDate('2026年11月8日'), '2026-11-08');
+  assert.strictEqual(Core.normalizeDate('2026-11-08 00:00:00'), '2026-11-08');
+  assert.strictEqual(Core.normalizeDate(' 2026-11-8 '), '2026-11-08');
+  assert.strictEqual(Core.normalizeDate('不是日期'), '不是日期');
+  assert.strictEqual(Core.normalizeDate(''), '');
+});
+
+test('Excel 另存的斜杠日期 CSV 导入后仍能进月度统计', () => {
+  // Numbers / Excel 另存会去掉 BOM、改成 CRLF、把日期写成 2026/11/8
+  const excelCsv = '日期,类型,分类,金额,备注,账户\r\n2026/11/8,支出,餐饮,12,晚餐,生活\r\n2026/11/1,支出,娱乐,147.22,自助,奖励\r\n';
+  const parsed = Core.parseCsv(excelCsv);
+  assert.strictEqual(parsed.success, true);
+  assert.strictEqual(parsed.records.length, 2);
+  assert.deepStrictEqual(parsed.records.map(r => r.date), ['2026-11-08', '2026-11-01']);
+  assert.strictEqual(parsed.records[1].bucket, 'reward');
+  assert.strictEqual(Core.filterByMonth(parsed.records, '2026-11').length, 2);
+  assert.strictEqual(Core.filterByRange(parsed.records, '2026-11-01', '2026-11-30').length, 2);
+});
+
+test('启动时 normalize 会修正历史数据里已存坏的日期', () => {
+  const fixed = Core.normalize({ records: [{ date: '2026/11/8', type: 'expense', amount: 10 }] });
+  assert.strictEqual(fixed.records[0].date, '2026-11-08');
+  assert.strictEqual(Core.filterByMonth(fixed.records, '2026-11').length, 1);
+});
+
 test('sortRecords 支持按账户筛选', () => {
   assert.strictEqual(Core.sortRecords(mixed, '', 'reward').length, 2);
   assert.strictEqual(Core.sortRecords(mixed, '', 'life').length, 4);
@@ -215,4 +230,104 @@ test('流水时间以记账日期为准，不是创建时间', () => {
   assert.strictEqual(Core.formatRecordTime({ date: '2026-11-01' }), '11-01');
 });
 
-console.log(`\n${passed} 项通过` + (process.exitCode ? '，存在失败项' : '，全部通过'));
+test('AI 地址：只填 base 时自动补 chat/completions', () => {
+  assert.strictEqual(
+    Core.normalizeAiEndpoint('https://open.bigmodel.cn/api/paas/v4'),
+    'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+  );
+  assert.strictEqual(
+    Core.normalizeAiEndpoint('https://api.deepseek.com/v1'),
+    'https://api.deepseek.com/v1/chat/completions'
+  );
+});
+
+test('AI 地址：完整端点不重复拼接，尾部斜杠与空格被清理', () => {
+  assert.strictEqual(
+    Core.normalizeAiEndpoint('  https://api.deepseek.com/v1/chat/completions/  '),
+    'https://api.deepseek.com/v1/chat/completions'
+  );
+  assert.strictEqual(
+    Core.normalizeAiEndpoint('https://open.bigmodel.cn/api/paas/v4/'),
+    'https://open.bigmodel.cn/api/paas/v4/chat/completions'
+  );
+});
+
+test('AI 地址：漏写协议时补 https，空配置保持为空', () => {
+  assert.strictEqual(
+    Core.normalizeAiEndpoint('api.openai.com/v1'),
+    'https://api.openai.com/v1/chat/completions'
+  );
+  assert.strictEqual(Core.normalizeAiEndpoint('   '), '');
+  assert.strictEqual(Core.normalizeAiEndpoint(null), '');
+});
+
+test('AI 错误：提取各家不同的错误字段', () => {
+  assert.ok(Core.formatAiError(401, '{"error":{"message":"Invalid API Key","code":"401"}}').includes('Invalid API Key'));
+  assert.ok(Core.formatAiError(400, { error: { code: '1210' } }).includes('1210'));
+  assert.ok(Core.formatAiError(429, { msg: '余额不足' }).includes('余额不足'));
+});
+
+test('AI 错误：非 JSON 响应给出报文片段，空响应给出兜底提示', () => {
+  assert.ok(Core.formatAiError(404, '<html><body>404 Not Found</body></html>').includes('404 Not Found'));
+  assert.ok(Core.formatAiError(401, '').includes('请检查接口地址'));
+});
+
+// ---------- Markdown 渲染（AI 回复，两端共用） ----------
+
+test('Markdown：标题、粗体、斜体、删除线', () => {
+  const html = Markdown.renderMarkdown('## 概览\n\n**餐饮**花费 *300* 元，~~原计划 200~~');
+  assert.ok(html.includes('<h2>概览</h2>'));
+  assert.ok(html.includes('<strong>餐饮</strong>'));
+  assert.ok(html.includes('<em>300</em>'));
+  assert.ok(html.includes('<del>原计划 200</del>'));
+});
+
+test('Markdown：有序/无序列表、嵌套、引用与分割线', () => {
+  const html = Markdown.renderMarkdown('- 餐饮\n- 交通\n  - 地铁\n\n1. 第一步\n\n> 建议\n\n---');
+  assert.ok(html.includes('<ul>'));
+  assert.ok(html.includes('<ol>'));
+  assert.ok(html.includes('class="md-nested"'));
+  assert.ok(html.includes('<blockquote>建议</blockquote>'));
+  assert.ok(html.includes('<hr>'));
+});
+
+test('Markdown：表格含对齐与多行', () => {
+  const html = Markdown.renderMarkdown('| 分类 | 金额 |\n| --- | ---: |\n| 餐饮 | 300 |\n| 交通 | 120 |');
+  assert.ok(html.includes('<table>'));
+  assert.ok(html.includes('text-align:right'));
+  assert.strictEqual((html.match(/<tr>/g) || []).length, 3);
+});
+
+test('Markdown：围栏代码块与行内代码只转义、不二次解析', () => {
+  const html = Markdown.renderMarkdown('`**不是粗体**`\n\n```js\nconst x = 1 < 2;\n```');
+  assert.ok(html.includes('<code class="md-code">**不是粗体**</code>'));
+  assert.ok(html.includes('&lt;'));
+  assert.ok(!html.includes('<strong>不是粗体</strong>'));
+  assert.ok(html.includes('<span class="md-lang">js</span>'));
+});
+
+test('Markdown：原始 HTML 被转义，绝不产生可执行脚本', () => {
+  const html = Markdown.renderMarkdown('<script>alert(1)</script>\n\n<img src=x onerror=alert(2)>');
+  assert.ok(html.includes('&lt;script&gt;'));
+  assert.ok(!html.includes('<script>'));
+  assert.ok(!html.includes('<img'));
+  assert.ok(html.includes('&lt;img'));
+});
+
+test('Markdown：链接只显示文本、图片不加载，不产生外链与外发请求', () => {
+  const html = Markdown.renderMarkdown('[官网](https://example.com) ![图](https://example.com/a.png)');
+  assert.ok(html.includes('官网'));
+  assert.ok(html.includes('[图片：图]'));
+  assert.ok(!html.includes('<a '));
+  assert.ok(!html.includes('<img'));
+});
+
+test('Markdown：空值与纯文本输入不报错', () => {
+  assert.strictEqual(Markdown.renderMarkdown(''), '');
+  assert.strictEqual(Markdown.renderMarkdown(null), '');
+  assert.strictEqual(Markdown.renderMarkdown(undefined), '');
+  assert.strictEqual(Markdown.renderMarkdown('普通一行'), '<p>普通一行</p>');
+  assert.strictEqual(Markdown.escapeHtml('a&b<c>'), 'a&amp;b&lt;c&gt;');
+});
+
+done('账本内核 / Markdown / AI 地址');

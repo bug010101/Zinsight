@@ -18,7 +18,7 @@ function init(ctx) {
   app.setName('Zinsight');
 
   // 创建系统托盘图标（右下角）
-  const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', '..', 'assets', 'icon.ico'));
+  const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', '..', 'assets', 'desktop', 'icon.ico'));
   ctx.tray = new Tray(icon);
 
   const contextMenu = Menu.buildFromTemplate([

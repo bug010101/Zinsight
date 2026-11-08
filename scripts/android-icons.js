@@ -1,10 +1,10 @@
 /**
- * 把 resources/android 里的启动图标铺进 Capacitor 生成的安卓工程。
+ * 把 assets/android 里的启动图标铺进 Capacitor 生成的安卓工程。
  *
  * 用法：npx cap add android && node scripts/android-icons.js
  *
  * 说明：
- * - 图标源文件是 assets/dock-icon.png（1024×1024），预先缩成各密度，
+ * - 图标源文件是 assets/desktop/dock-icon.png（1024×1024），预先缩成各密度，
  *   所以这里不需要 ImageMagick / 在线转换。
  * - 同时删掉 mipmap-anydpi-v26 的自适应图标 XML，让系统直接使用位图，
  *   避免「白底圆 + 圆角方块」的套娃效果。
@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const SRC_DIR = path.join(ROOT, 'resources', 'android');
+const SRC_DIR = path.join(ROOT, 'assets', 'android');
 const RES_DIR = path.join(ROOT, 'android', 'app', 'src', 'main', 'res');
 
 function main() {
@@ -23,7 +23,7 @@ function main() {
     return;
   }
   if (!fs.existsSync(SRC_DIR)) {
-    console.log('[android-icons] 没有 resources/android，跳过');
+    console.log('[android-icons] 没有 assets/android，跳过');
     return;
   }
 

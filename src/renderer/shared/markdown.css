@@ -1,0 +1,89 @@
+/* Markdown 消息样式：桌面端与安卓端共用一份，不依赖各端 CSS 变量 */
+/* 桌面端直接引用 ../shared/markdown.css；安卓端由 build-www.js 复制成 www/markdown.css */
+
+.chat-msg.ai.md-body { white-space: normal; }
+.md-body > :first-child { margin-top: 0; }
+.md-body > :last-child { margin-bottom: 0; }
+
+.md-body h1, .md-body h2, .md-body h3,
+.md-body h4, .md-body h5, .md-body h6 {
+  margin: 10px 0 6px;
+  line-height: 1.35;
+  font-weight: 650;
+}
+.md-body h1 { font-size: 1.3em; }
+.md-body h2 { font-size: 1.2em; }
+.md-body h3 { font-size: 1.1em; }
+.md-body h4, .md-body h5, .md-body h6 { font-size: 1em; }
+
+.md-body p { margin: 0 0 8px; }
+.md-body ul, .md-body ol { margin: 0 0 8px; padding-left: 20px; }
+.md-body li { margin: 2px 0; }
+.md-body li.md-nested { margin-left: 14px; list-style: circle; }
+.md-body strong { font-weight: 700; }
+.md-body em { font-style: italic; }
+.md-body del { opacity: .65; }
+
+.md-body blockquote {
+  margin: 0 0 8px;
+  padding: 4px 10px;
+  border-left: 3px solid rgba(127, 127, 127, .55);
+  background: rgba(127, 127, 127, .08);
+}
+.md-body hr {
+  border: 0;
+  border-top: 1px solid rgba(127, 127, 127, .3);
+  margin: 10px 0;
+}
+
+.md-body .md-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .9em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, .16);
+}
+.md-body .md-pre {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(127, 127, 127, .12);
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.md-body .md-pre code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.md-body .md-lang {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  opacity: .6;
+}
+.md-body .md-url {
+  font-size: .85em;
+  opacity: .65;
+  word-break: break-all;
+}
+
+.md-body .md-table-wrap {
+  margin: 0 0 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.md-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.md-body th, .md-body td {
+  border: 1px solid rgba(127, 127, 127, .3);
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+.md-body th {
+  background: rgba(127, 127, 127, .12);
+  font-weight: 650;
+}

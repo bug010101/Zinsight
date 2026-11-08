@@ -13,7 +13,7 @@ function createMainWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'Zinsight',
-    icon: path.join(__dirname, '..', '..', 'assets', 'dock-icon.png'),
+    icon: path.join(__dirname, '..', '..', 'assets', 'desktop', 'dock-icon.png'),
     backgroundColor: '#f5f5f7',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -22,7 +22,7 @@ function createMainWindow() {
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'desktop', 'index.html'));
 
   if (process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools();

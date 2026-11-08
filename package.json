@@ -1,7 +1,7 @@
 {
   "name": "Zinsight",
   "productName": "Zinsight",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "轻量级个人记账应用（桌面端 Electron + 安卓端 Capacitor）",
   "license": "MIT",
   "author": {
@@ -17,7 +17,8 @@
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux",
     "build:www": "node scripts/build-www.js",
-    "test:core": "node scripts/test-core.js",
+    "lint": "node scripts/check-style.js",
+    "test:core": "npm run lint && node scripts/test-core.js && node scripts/test-ai.js",
     "android:init": "npm run build:www && npx cap add android && node scripts/android-version.js && node scripts/android-icons.js",
     "android:sync": "npm run build:www && node scripts/android-version.js && node scripts/android-icons.js && npx cap sync android",
     "android:icons": "node scripts/android-icons.js",
@@ -41,11 +42,11 @@
     "files": [
       "main.js",
       "src/**/*",
-      "assets/**/*"
+      "assets/desktop/**/*"
     ],
     "mac": {
       "category": "public.app-category.finance",
-      "icon": "assets/dock-icon.png",
+      "icon": "assets/desktop/dock-icon.png",
       "target": [
         "dmg",
         "dir"
@@ -53,13 +54,13 @@
       "identity": null
     },
     "win": {
-      "icon": "assets/icon.ico",
+      "icon": "assets/desktop/icon.ico",
       "target": [
         "nsis"
       ]
     },
     "linux": {
-      "icon": "assets/dock-icon.png",
+      "icon": "assets/desktop/dock-icon.png",
       "target": [
         "deb"
       ],

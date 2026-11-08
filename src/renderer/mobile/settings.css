@@ -1,0 +1,188 @@
+/* 安卓端 · 设置项与底部导航 */
+/* 由 styles.css 按职责拆分而来，顺序由 index.html 保证 */
+
+/* ============================ 设置项 ============================ */
+
+.field { margin-bottom: 14px; }
+.field > label {
+  display: block;
+  font-size: 12.5px;
+  color: var(--on-surface-var);
+  margin-bottom: 6px;
+}
+.field input, .field select, .field textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  outline: none;
+  font-size: 14.5px;
+  transition: border-color .15s, background .15s;
+}
+.field input:focus, .field textarea:focus, .field select:focus {
+  border-color: var(--primary);
+  background: var(--surface);
+}
+#fbContent { font-family: inherit; font-size: 14px; line-height: 1.65; min-height: 108px; }
+
+.field-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.field-row > * { flex: 1 1 0; min-width: 0; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font-size: 14.5px;
+  font-weight: 500;
+  transition: filter .15s, transform .1s;
+  white-space: nowrap;
+}
+.btn:active { transform: scale(.98); filter: brightness(.96); }
+.btn-filled { background: var(--primary); color: #fff; }
+.btn-tonal { background: var(--primary-soft); color: var(--primary-deep); }
+.btn-outline { border: 1px solid var(--outline); background: var(--surface); color: var(--on-surface); }
+.btn-danger { background: #fce8e6; color: var(--expense); }
+.btn-block { display: flex; width: 100%; }
+
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-row .btn { flex: 1; min-width: 130px; }
+
+.cat-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.cat-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--outline);
+  border-radius: 999px;
+  padding: 7px 8px 7px 13px;
+  font-size: 13px;
+}
+.cat-tag button {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--on-surface-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+}
+.cat-tag button:active { background: #fce8e6; color: var(--expense); }
+
+.hint { font-size: 12.5px; color: var(--on-surface-var); line-height: 1.7; }
+.ai-test-result { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; line-height: 1.6; background: var(--surface-2); color: var(--on-surface); word-break: break-word; }
+.ai-test-result.ok { background: #e4f4ea; color: #1c6b3a; }
+.ai-test-result.bad { background: #fceaea; color: #a32d2d; }
+.hint code {
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11.5px;
+}
+.hint pre {
+  background: var(--surface-2);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  font-size: 11.5px;
+  line-height: 1.6;
+  margin: 8px 0;
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+.cat-budget-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cat-budget-row > span:first-child {
+  flex: 0 0 auto;
+  min-width: 40px;
+  max-width: 28%;
+  font-size: 13px;
+  color: var(--on-surface-var);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cat-budget-row input {
+  flex: 0 0 auto;
+  width: 92px;
+  padding: 9px 10px;
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  outline: none;
+  font-size: 14px;
+  text-align: right;
+}
+.cat-budget-row .used {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  font-size: 11.5px;
+  color: var(--on-surface-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cat-budget-row .used.over { color: var(--expense); font-weight: 600; }
+
+.section-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--on-surface-var);
+  letter-spacing: .3px;
+  margin: 18px 4px 8px;
+}
+.section-title.danger { color: var(--expense); }
+
+/* ============================ 底部导航 ============================ */
+
+.bottomnav {
+  flex-shrink: 0;
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--outline);
+  padding-bottom: var(--safe-bottom);
+  box-shadow: 0 -2px 12px rgba(16, 24, 40, .04);
+}
+.nav-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 0 7px;
+  color: var(--on-surface-dim);
+  font-size: 11px;
+  transition: color .15s;
+}
+.nav-icon-wrap {
+  width: 52px;
+  height: 28px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .18s;
+}
+.nav-icon-wrap svg { width: 21px; height: 21px; }
+.nav-btn > span:last-child {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-btn.active { color: var(--primary-deep); font-weight: 600; }
+.nav-btn.active .nav-icon-wrap { background: var(--primary-soft); }
+.nav-btn:active .nav-icon-wrap { background: rgba(11, 87, 208, .1); }

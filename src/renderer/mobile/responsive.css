@@ -1,0 +1,48 @@
+/* 安卓端 · 小屏 / 平板 / 横屏适配 */
+/* 由 styles.css 按职责拆分而来，顺序由 index.html 保证 */
+
+/* ============================ 屏幕适配 ============================ */
+
+/* 小屏（320~360 的老机型、横屏分屏） */
+@media (max-width: 360px) {
+  body { font-size: 14.5px; }
+  .content { padding-left: 12px; padding-right: 12px; }
+  .appbar { padding-left: calc(12px + var(--safe-left, 0px)); padding-right: calc(12px + var(--safe-right, 0px)); }
+  .appbar-title { font-size: 19px; }
+  .balance-card { padding: 16px; border-radius: 18px; }
+  .balance-amount { font-size: 30px; }
+  .balance-meta { gap: 6px; }
+  .balance-meta > div { padding: 7px 8px; }
+  .reward-card { padding: 16px; border-radius: 18px; }
+  .reward-amount { font-size: 26px; }
+  .stat-card { padding: 10px; }
+  .card { padding: 14px; border-radius: 18px; }
+  .cat-budget-row input { width: 82px; }
+  .nav-btn { font-size: 10px; }
+  .nav-icon-wrap { width: 44px; }
+  .nav-icon-wrap svg { width: 19px; height: 19px; }
+  .btn { padding: 0 14px; font-size: 14px; }
+  .btn-row .btn { min-width: 0; }
+  .sheet { padding-left: calc(14px + var(--safe-left)); padding-right: calc(14px + var(--safe-right)); }
+  .dialog { padding: 20px 18px 12px; }
+  .toast { max-width: 90vw; }
+}
+
+/* 平板 / 横屏宽屏：卡片按两列排，不浪费横向空间 */
+@media (min-width: 600px) {
+  .content { padding-left: 20px; padding-right: 20px; }
+  .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .balance-amount { font-size: 42px; }
+  .reward-amount { font-size: 34px; }
+}
+
+/* 横屏矮屏：压缩头部和图表高度，保证首屏能看到余额 */
+@media (max-height: 480px) and (orientation: landscape) {
+  .appbar { padding-top: calc(var(--safe-top) + 6px); padding-bottom: 6px; }
+  .appbar-title { font-size: 18px; }
+  .balance-card { padding: 14px 18px; }
+  .balance-amount { font-size: 28px; }
+  .balance-foot { display: none; }
+  .trend-chart { height: 78px; }
+  .chat-input-row { padding-bottom: calc(6px + var(--safe-bottom)); }
+}
