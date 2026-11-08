@@ -31,6 +31,16 @@
 
   const BOM = '\uFEFF';
 
+  /**
+   * 消费归属（账户）
+   *   life   —— 生活消费，走月度预算，影响可用余额
+   *   reward —— 奖励消费，走单独的奖励额度，不影响可用余额
+   * 默认永远是 life，老数据没有这个字段也按 life 处理。
+   */
+  const BUCKET_LIFE = 'life';
+  const BUCKET_REWARD = 'reward';
+  const BUCKET_LABEL = { life: '生活', reward: '奖励' };
+
   // ========== 日期 ==========
 
   function pad2(n) {
@@ -89,6 +99,8 @@
     return {
       records: [],
       budget: { monthly: 1000, categories: {} },
+      // 奖励额度：每月 1 号自动恢复；0 表示还没设置
+      reward: { monthly: 0 },
       categories: DEFAULT_CATEGORIES.slice(),
       createdAt: new Date().toISOString()
     };
@@ -112,22 +124,40 @@
         monthly: Number(d.budget && d.budget.monthly) || 0,
         categories: (d.budget && d.budget.categories) || {}
       },
+      reward: {
+        monthly: Number(d.reward && d.reward.monthly) || 0
+      },
       categories: Array.isArray(d.categories) && d.categories.length ? d.categories.slice() : base.categories,
       createdAt: d.createdAt || base.createdAt
     };
   }
 
   function normalizeRecord(r) {
+    const rec = r || {};
     return {
-      id: r.id != null ? r.id : uid(),
-      type: r.type === 'income' ? 'income' : 'expense',
-      amount: Number(r.amount) || 0,
-      category: r.category || '其他',
-      note: r.note || '',
-      date: r.date || todayStr(),
-      includeInBalance: r.includeInBalance !== false,
-      createdAt: r.createdAt || new Date().toISOString()
+      id: rec.id != null ? rec.id : uid(),
+      type: rec.type === 'income' ? 'income' : 'expense',
+      amount: Number(rec.amount) || 0,
+      category: rec.category || '其他',
+      note: rec.note || '',
+      date: rec.date || todayStr(),
+      bucket: rec.bucket === BUCKET_REWARD ? BUCKET_REWARD : BUCKET_LIFE,
+      includeInBalance: rec.includeInBalance !== false,
+      createdAt: rec.createdAt || new Date().toISOString()
     };
+  }
+
+  /** 这条记录算不算奖励消费（收入永远是生活账户） */
+  function isReward(r) {
+    return !!r && r.type === 'expense' && r.bucket === BUCKET_REWARD;
+  }
+
+  function bucketOf(r) {
+    return isReward(r) ? BUCKET_REWARD : BUCKET_LIFE;
+  }
+
+  function bucketLabel(r) {
+    return BUCKET_LABEL[bucketOf(r)] || BUCKET_LABEL.life;
   }
 
   // ========== 统计 ==========
@@ -139,19 +169,33 @@
 
   /**
    * 汇总一组记录
-   * @returns {{expense:number, income:number, incomeInBalance:number, count:number, catSpent:Object}}
+   * expense        —— 全部支出（生活 + 奖励）
+   * lifeExpense    —— 生活支出，扣可用余额的那部分
+   * rewardExpense  —— 奖励支出，只扣奖励额度
+   * catSpent       —— 生活支出按分类汇总（分类预算只看这个）
+   * rewardCatSpent —— 奖励支出按分类汇总
+   * @returns {{expense:number, lifeExpense:number, rewardExpense:number, income:number, incomeInBalance:number, count:number, catSpent:Object, rewardCatSpent:Object}}
    */
   function summarize(records) {
     let expense = 0;
+    let lifeExpense = 0;
+    let rewardExpense = 0;
     let income = 0;
     let incomeInBalance = 0;
     const catSpent = {};
+    const rewardCatSpent = {};
 
-    records.forEach(r => {
+    (records || []).forEach(r => {
       const amount = Number(r.amount) || 0;
       if (r.type === 'expense') {
         expense += amount;
-        catSpent[r.category] = (catSpent[r.category] || 0) + amount;
+        if (isReward(r)) {
+          rewardExpense += amount;
+          rewardCatSpent[r.category] = (rewardCatSpent[r.category] || 0) + amount;
+        } else {
+          lifeExpense += amount;
+          catSpent[r.category] = (catSpent[r.category] || 0) + amount;
+        }
       } else {
         income += amount;
         // 只有勾选了「计入余额」的收入才算进可用余额
@@ -159,12 +203,30 @@
       }
     });
 
-    return { expense, income, incomeInBalance, count: records.length, catSpent };
+    return {
+      expense, lifeExpense, rewardExpense,
+      income, incomeInBalance,
+      count: (records || []).length,
+      catSpent, rewardCatSpent
+    };
   }
 
-  /** 可用余额 = 预算 + 计入余额的收入 - 支出 */
+  /** 可用余额 = 预算 + 计入余额的收入 - 生活支出（奖励消费不参与） */
   function balanceOf(monthlyBudget, summary) {
-    return (Number(monthlyBudget) || 0) + summary.incomeInBalance - summary.expense;
+    return (Number(monthlyBudget) || 0) + summary.incomeInBalance -
+      (summary.lifeExpense != null ? summary.lifeExpense : summary.expense);
+  }
+
+  /** 奖励额度剩余 = 奖励额度 - 奖励支出 */
+  function rewardBalanceOf(monthlyReward, summary) {
+    return (Number(monthlyReward) || 0) - (summary.rewardExpense || 0);
+  }
+
+  /** 奖励额度的使用比例（0~100），没设额度时返回 0 */
+  function rewardUsedPct(monthlyReward, summary) {
+    const cap = Number(monthlyReward) || 0;
+    if (cap <= 0) return 0;
+    return Math.min(((summary.rewardExpense || 0) / cap) * 100, 100);
   }
 
   /** 把余额换算成「今天起平均每天还能花多少」 */
@@ -182,12 +244,14 @@
     return 'normal';
   }
 
-  /** 分类占比（只看支出） */
-  function categorySummary(records) {
+  /** 分类占比（默认只看生活支出，传 'reward' 则看奖励支出） */
+  function categorySummary(records, bucket) {
+    const wantReward = bucket === BUCKET_REWARD;
     const map = {};
     let total = 0;
-    records.forEach(r => {
+    (records || []).forEach(r => {
       if (r.type !== 'expense') return;
+      if (isReward(r) !== wantReward) return;
       const amount = Number(r.amount) || 0;
       map[r.category] = (map[r.category] || 0) + amount;
       total += amount;
@@ -198,25 +262,28 @@
     return { total, items };
   }
 
-  /** 每日支出（返回 {1: 0, 2: 25.5, ...}） */
-  function dailyTrend(records, days) {
+  /** 每日支出（返回 {1: 0, 2: 25.5, ...}），默认只统计生活支出 */
+  function dailyTrend(records, days, bucket) {
+    const wantReward = bucket === BUCKET_REWARD;
     const daily = {};
     const total = days || daysInMonth();
     for (let i = 1; i <= total; i++) daily[i] = 0;
-    records.forEach(r => {
+    (records || []).forEach(r => {
       if (r.type !== 'expense' || !r.date) return;
+      if (isReward(r) !== wantReward) return;
       const day = parseInt(r.date.slice(8, 10), 10);
       if (day >= 1 && day <= total) daily[day] += Number(r.amount) || 0;
     });
     return daily;
   }
 
-  /** 近几个月支出合计（返回 {'2026-06': 123.45, ...}） */
-  function monthSums(records, months) {
+  /** 近几个月支出合计（返回 {'2026-06': 123.45, ...}），默认只统计生活支出 */
+  function monthSums(records, months, bucket) {
+    const wantReward = bucket === BUCKET_REWARD;
     const out = {};
     months.forEach(m => {
-      out[m] = records
-        .filter(r => r.type === 'expense' && r.date && r.date.startsWith(m))
+      out[m] = (records || [])
+        .filter(r => r.type === 'expense' && r.date && r.date.startsWith(m) && isReward(r) === wantReward)
         .reduce((s, r) => s + (Number(r.amount) || 0), 0);
     });
     return out;
@@ -242,11 +309,16 @@
 
   // ========== 流水排序与分页 ==========
 
-  /** 搜索 + 排序（新的在前） */
-  function sortRecords(records, keyword) {
+  /**
+   * 搜索 + 排序（新的在前）
+   * @param {string} [bucket] 'life' / 'reward' 只看某一边；不传则全部
+   */
+  function sortRecords(records, keyword, bucket) {
     const kw = (keyword || '').trim().toLowerCase();
-    return records
+    const want = (bucket === BUCKET_REWARD || bucket === BUCKET_LIFE) ? bucket : null;
+    return (records || [])
       .filter(r => {
+        if (want && bucketOf(r) !== want) return false;
         if (!kw) return true;
         return (r.note && String(r.note).toLowerCase().includes(kw)) ||
           (r.category && String(r.category).toLowerCase().includes(kw));
@@ -259,15 +331,23 @@
       });
   }
 
-  /** 列表里显示的时间：有创建时间显示 月-日 时:分，否则显示日期 */
+  /**
+   * 列表里显示的时间：以「记账日期」为准
+   *   - 今天的记录：今天 HH:mm
+   *   - 其它日期：MM-DD
+   * 之前这里优先用 createdAt，导致改了记账日期后列表还是显示当天，看着像没改成功。
+   */
   function formatRecordTime(r) {
-    if (r.createdAt) {
+    const date = r && r.date ? String(r.date) : '';
+    const today = todayStr();
+    let time = '';
+    if (r && r.createdAt) {
       const d = new Date(r.createdAt);
-      if (!isNaN(d.getTime())) {
-        return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-      }
+      if (!isNaN(d.getTime())) time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
     }
-    return r.date ? String(r.date).slice(5) : '';
+    if (!date) return time;
+    if (date === today) return time ? `今天 ${time}` : '今天';
+    return date.slice(5);
   }
 
   // ========== CSV ==========
@@ -278,20 +358,21 @@
 
   /** 全量导出（和桌面端「导出全部 CSV」同格式） */
   function buildFullCsv(records) {
-    const header = '日期,类型,分类,金额,备注\n';
-    const rows = records.map(r => {
+    const header = '日期,类型,分类,金额,备注,账户\n';
+    const rows = (records || []).map(r => {
       const type = r.type === 'income' ? '收入' : '支出';
-      return `${r.date || ''},${type},${csvCell(r.category)},${Number(r.amount) || 0},${csvCell(r.note)}`;
+      const account = r.type === 'expense' ? bucketLabel(r) : BUCKET_LABEL.life;
+      return `${r.date || ''},${type},${csvCell(r.category)},${Number(r.amount) || 0},${csvCell(r.note)},${account}`;
     }).join('\n');
     return BOM + header + rows;
   }
 
   /** 按时间范围导出 CSV（机器学习用，带 id） */
   function buildRangeCsv(records) {
-    const header = 'id,date,type,category,amount,note\n';
-    const rows = records.map(r => {
+    const header = 'id,date,type,category,amount,note,bucket\n';
+    const rows = (records || []).map(r => {
       const note = String(r.note || '').replace(/"/g, "'").replace(/[\r\n]+/g, ' ');
-      return `${r.id},"${r.date}","${r.type}","${r.category}",${Number(r.amount) || 0},"${note}"`;
+      return `${r.id},"${r.date}","${r.type}","${r.category}",${Number(r.amount) || 0},"${note}","${bucketOf(r)}"`;
     }).join('\n');
     return BOM + header + rows;
   }
@@ -317,7 +398,8 @@
 
   /**
    * 解析 CSV 文本（与桌面端导入逻辑一致）
-   * 表头支持中英文：date/日期、type/类型、category/分类、amount/金额、note/备注、include_in_balance
+   * 表头支持中英文：date/日期、type/类型、category/分类、amount/金额、note/备注、
+   * include_in_balance、bucket/account/账户（life/reward 或 生活/奖励）
    */
   function parseCsv(text) {
     const content = String(text || '').replace(/^\uFEFF/, '');
@@ -329,7 +411,8 @@
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
     const colIdx = {};
     headers.forEach((h, i) => {
-      if (h.includes('date') || h === '日期') colIdx.date = i;
+      if (h.includes('bucket') || h.includes('account') || h === '账户' || h === '归属') colIdx.bucket = i;
+      else if (h.includes('date') || h === '日期') colIdx.date = i;
       else if (h.includes('type') || h === '类型') colIdx.type = i;
       else if (h.includes('category') || h === '分类') colIdx.category = i;
       else if (h.includes('amount') || h === '金额') colIdx.amount = i;
@@ -356,6 +439,7 @@
       const get = (idx, def) => (idx !== undefined && parts[idx] !== undefined ? parts[idx].trim() : (def || ''));
       const typeRaw = get(colIdx.type);
       const includeRaw = get(colIdx.include, 'true').toLowerCase();
+      const accountRaw = get(colIdx.bucket).toLowerCase();
       const amount = parseFloat(get(colIdx.amount));
 
       if (!get(colIdx.date) || !isFinite(amount)) continue;
@@ -367,6 +451,7 @@
         category: get(colIdx.category),
         amount,
         note: get(colIdx.note),
+        bucket: accountRaw === 'reward' || accountRaw === '奖励' ? BUCKET_REWARD : BUCKET_LIFE,
         includeInBalance: includeRaw !== 'false' && includeRaw !== '0',
         createdAt: new Date().toISOString()
       });
@@ -379,12 +464,14 @@
   return {
     DEFAULT_CATEGORIES,
     CATEGORY_ICONS,
+    BUCKET_LIFE, BUCKET_REWARD, BUCKET_LABEL,
     // 日期
     todayStr, monthKey, monthStartStr, daysInMonth, lastMonths,
     // 基础
     pad2, formatMoney, uid, catIcon, defaultData, defaultConfig, normalize,
+    isReward, bucketOf, bucketLabel,
     // 统计
-    filterByMonth, summarize, balanceOf, dailyBudget, budgetLevel,
+    filterByMonth, summarize, balanceOf, rewardBalanceOf, rewardUsedPct, dailyBudget, budgetLevel,
     categorySummary, dailyTrend, monthSums, categoryBudgetRows,
     // 流水
     sortRecords, formatRecordTime,

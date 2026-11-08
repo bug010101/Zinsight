@@ -29,8 +29,10 @@ let appConfig = null;
 
 let currentView = 'dashboard';
 let currentType = 'expense';
+let currentBucket = 'life';   // 'life' 生活消费 | 'reward' 奖励消费
 let selectedCategory = '';
 let editingId = null;
+let recordFilter = 'all';     // 流水筛选：all / life / reward
 let filteredRecords = [];
 let renderPage = 1;
 let chatBusy = false;
@@ -324,21 +326,51 @@ function renderDashboard() {
 
   $('#balanceAmount').textContent = Core.formatMoney(Math.max(balance, 0));
   $('#budgetTotal').textContent = '¥' + Core.formatMoney(budget);
-  $('#spentTotal').textContent = '¥' + Core.formatMoney(summary.expense);
+  $('#spentTotal').textContent = '¥' + Core.formatMoney(summary.lifeExpense);
   $('#dailyAvg').textContent = '¥' + Core.formatMoney(Core.dailyBudget(balance, daysLeft));
   $('#daysLeft').textContent = daysLeft;
 
-  $('#monthExpense').textContent = '¥' + Core.formatMoney(summary.expense);
+  $('#monthExpense').textContent = '¥' + Core.formatMoney(summary.lifeExpense);
+  $('#monthReward').textContent = '¥' + Core.formatMoney(summary.rewardExpense);
   $('#monthIncome').textContent = '¥' + Core.formatMoney(summary.income);
   $('#monthCount').textContent = summary.count + ' 笔';
 
   const card = $('#balanceCard');
   card.classList.remove('warning', 'danger');
-  const level = Core.budgetLevel(summary.expense, budget);
+  const level = Core.budgetLevel(summary.lifeExpense, budget);
   if (level !== 'normal') card.classList.add(level);
 
+  renderRewardCard(summary, daysLeft);
   renderCatBudgetOverview();
   renderRecentList();
+}
+
+/** 奖励额度卡：独立池子，只受奖励消费影响 */
+function renderRewardCard(summary, daysLeft) {
+  const cap = Number((appData.reward && appData.reward.monthly) || 0);
+  const spent = summary.rewardExpense;
+  const left = cap - spent;
+  const card = $('#rewardCard');
+
+  card.classList.remove('over', 'idle');
+  $('#rewardTotal').textContent = Core.formatMoney(cap);
+  $('#rewardSpent').textContent = Core.formatMoney(spent);
+  $('#rewardLeft').textContent = Core.formatMoney(Math.max(left, 0));
+  $('#rewardDailyAvg').textContent = Core.formatMoney(left > 0 ? left / Math.max(daysLeft, 1) : 0);
+  $('#rewardFill').style.width = cap > 0 ? Core.rewardUsedPct(cap, summary) + '%' : '0%';
+
+  if (!cap) {
+    card.classList.add('idle');
+    $('#rewardTag').textContent = '未设置';
+    $('#rewardHint').textContent = '还没设奖励额度，去「设置 → 预算设置」填一个';
+    return;
+  }
+
+  $('#rewardTag').textContent = left < 0 ? '已超额' : '奖励自己';
+  if (left < 0) card.classList.add('over');
+  $('#rewardHint').textContent = left < 0
+    ? `奖励额度超了 ¥${Core.formatMoney(Math.abs(left))}，下个月再补回来`
+    : '奖励消费只扣这份额度，不影响生活余额';
 }
 
 function renderCatBudgetOverview() {
@@ -374,24 +406,34 @@ function renderRecentList() {
 
 function recordItemHtml(r) {
   const sign = r.type === 'expense' ? '-' : '+';
+  const isReward = Core.isReward(r);
   return `
     <div class="record-item" data-id="${esc(r.id)}">
-      <div class="record-icon">${Core.catIcon(r.category)}</div>
+      <div class="record-icon${isReward ? ' reward' : ''}">${Core.catIcon(r.category)}</div>
       <div class="record-info">
-        <div class="record-cat">${esc(r.category)}</div>
+        <div class="record-cat">${esc(r.category)}${isReward ? '<span class="record-badge">奖励</span>' : ''}</div>
         <div class="record-note">${esc(r.note || '—')}</div>
       </div>
       <div class="record-right">
-        <div class="record-amount ${r.type}">${sign}¥${Core.formatMoney(r.amount)}</div>
+        <div class="record-amount ${r.type}${isReward ? ' reward' : ''}">${sign}¥${Core.formatMoney(r.amount)}</div>
         <div class="record-date">${esc(Core.formatRecordTime(r))}</div>
       </div>
     </div>`;
 }
 
 function renderRecords() {
-  filteredRecords = Core.sortRecords(appData.records, $('#searchInput').value);
+  const bucket = recordFilter === 'all' ? null : recordFilter;
+  filteredRecords = Core.sortRecords(appData.records, $('#searchInput').value, bucket);
   renderPage = 1;
   paintRecords();
+}
+
+function setRecordFilter(filter) {
+  recordFilter = filter;
+  $$('#recordFilterChips .filter-chip').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === filter);
+  });
+  renderRecords();
 }
 
 function paintRecords() {
@@ -399,9 +441,14 @@ function paintRecords() {
   const footer = $('#recordsFooter');
 
   if (!filteredRecords.length) {
-    list.innerHTML = '<div class="empty">' +
-      ($('#searchInput').value ? '没有匹配的记录' : '还没有记录，点右上角 + 记一笔') +
-      '</div>';
+    const tip = $('#searchInput').value
+      ? '没有匹配的记录'
+      : recordFilter === 'reward'
+        ? '还没有奖励消费记录'
+        : recordFilter === 'life'
+          ? '还没有生活消费记录'
+          : '还没有记录，点右上角 + 记一笔';
+    list.innerHTML = '<div class="empty">' + tip + '</div>';
     footer.textContent = '';
     return;
   }
@@ -426,6 +473,7 @@ function renderStats() {
   renderCategoryChart();
   renderTrendChart();
   renderMonthCompare();
+  renderRewardCategoryChart();
 }
 
 const CHART_COLORS = ['#0b57d0', '#1e8e3e', '#e8710a', '#d93025', '#7b3fe4', '#12a4b8', '#e5257a', '#8a8f98'];
@@ -483,6 +531,26 @@ function renderMonthCompare() {
   }).join('');
 }
 
+const REWARD_COLORS = ['#6f3fd4', '#9d72ff', '#c084fc', '#e879f9'];
+
+function renderRewardCategoryChart() {
+  const container = $('#rewardCategoryChart');
+  const { total, items } = Core.categorySummary(getMonthRecords(), 'reward');
+
+  if (!total) {
+    container.innerHTML = '<div class="empty">本月还没有奖励消费，记一笔选「奖励消费」试试</div>';
+    return;
+  }
+
+  container.innerHTML = items.map((it, i) => `
+    <div class="bar-row">
+      <div class="bar-label">${esc(it.cat)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${it.pct.toFixed(1)}%;background:${REWARD_COLORS[i % REWARD_COLORS.length]};"></div></div>
+      <div class="bar-value">¥${Core.formatMoney(it.sum)}</div>
+    </div>
+  `).join('');
+}
+
 /* ============================ 记账弹层 ============================ */
 
 function showSheet() {
@@ -499,6 +567,7 @@ function hideSheet() {
 function openSheet(record) {
   editingId = record ? record.id : null;
   currentType = record ? record.type : 'expense';
+  currentBucket = record ? Core.bucketOf(record) : 'life';
   selectedCategory = record && record.category
     ? record.category
     : (appData.categories[0] || '其他');
@@ -507,11 +576,13 @@ function openSheet(record) {
   $('#inputAmount').value = record ? record.amount : '';
   $('#inputNote').value = record ? (record.note || '') : '';
   $('#inputDate').value = record ? record.date : Core.todayStr();
+  $('#inputDate').dataset.picked = $('#inputDate').value;
   $('#inputIncludeBalance').checked = record ? record.includeInBalance !== false : true;
   $('#btnSheetDelete').style.display = record ? 'inline-flex' : 'none';
   $('#btnSheetSave').textContent = record ? '保存' : '记一笔';
 
   syncTypeUI();
+  syncBucketUI();
   renderCategoryChips();
   showSheet();
   if (!record) setTimeout(() => $('#inputAmount').focus(), 280);
@@ -520,6 +591,21 @@ function openSheet(record) {
 function syncTypeUI() {
   $$('#typeSwitch .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.type === currentType));
   $('#includeBalanceRow').classList.toggle('hidden', currentType !== 'income');
+  // 收入没有归属概念，固定算生活
+  const isIncome = currentType === 'income';
+  $('#bucketSwitch').classList.toggle('hidden', isIncome);
+  $('#bucketHint').classList.toggle('hidden', isIncome);
+  if (isIncome && currentBucket !== 'life') {
+    currentBucket = 'life';
+    syncBucketUI();
+  }
+}
+
+function syncBucketUI() {
+  $$('#bucketSwitch .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.bucket === currentBucket));
+  $('#bucketHint').textContent = currentBucket === 'reward'
+    ? '奖励消费只扣奖励额度，不影响生活余额（额度在设置里改）'
+    : '生活消费走月度预算，正常扣可用余额';
 }
 
 function renderCategoryChips() {
@@ -535,7 +621,8 @@ function renderCategoryChips() {
 async function saveSheet() {
   const amount = parseFloat($('#inputAmount').value);
   const note = $('#inputNote').value.trim();
-  const date = $('#inputDate').value;
+  const dateEl = $('#inputDate');
+  const date = dateEl.value || dateEl.dataset.picked || Core.todayStr();
 
   if (!amount || amount <= 0) { toast('请输入有效金额'); return; }
   if (!date) { toast('请选择日期'); return; }
@@ -543,6 +630,7 @@ async function saveSheet() {
   const includeInBalance = currentType === 'income'
     ? $('#inputIncludeBalance').checked
     : true; // 支出本来就是减余额
+  const bucket = currentType === 'income' ? 'life' : currentBucket;
 
   if (editingId) {
     const rec = appData.records.find(r => String(r.id) === String(editingId));
@@ -552,6 +640,7 @@ async function saveSheet() {
       rec.note = note;
       rec.date = date;
       rec.type = currentType;
+      rec.bucket = bucket;
       rec.includeInBalance = includeInBalance;
     }
     toast('已更新');
@@ -563,10 +652,11 @@ async function saveSheet() {
       category: selectedCategory,
       note: note,
       date: date,
+      bucket: bucket,
       includeInBalance: includeInBalance,
       createdAt: new Date().toISOString()
     });
-    toast('已记一笔');
+    toast(bucket === 'reward' ? '已记一笔奖励消费' : '已记一笔');
   }
 
   await persist();
@@ -596,6 +686,7 @@ async function deleteCurrent() {
 
 function renderSettings() {
   $('#setMonthlyBudget').value = appData.budget.monthly || '';
+  $('#setRewardBudget').value = (appData.reward && appData.reward.monthly) || '';
   $('#setAiBaseUrl').value = (appConfig.ai && appConfig.ai.baseUrl) || '';
   $('#setAiKey').value = (appConfig.ai && appConfig.ai.apiKey) || '';
   $('#setAiModel').value = (appConfig.ai && appConfig.ai.model) || '';
@@ -629,6 +720,8 @@ function renderCatList() {
 
 async function saveBudget() {
   appData.budget.monthly = parseFloat($('#setMonthlyBudget').value) || 0;
+  if (!appData.reward) appData.reward = { monthly: 0 };
+  appData.reward.monthly = parseFloat($('#setRewardBudget').value) || 0;
   const categories = {};
   $$('#catBudgetSettings .cat-budget-row input').forEach(input => {
     const val = parseFloat(input.value) || 0;
@@ -639,6 +732,7 @@ async function saveBudget() {
   await persist();
   renderDashboard();
   renderCatBudgetSettings();
+  renderSettings();
   toast('预算已保存');
 }
 
@@ -855,6 +949,26 @@ function bindEvents() {
     });
   });
 
+  $$('#bucketSwitch .seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentBucket = btn.dataset.bucket;
+      syncBucketUI();
+    });
+  });
+
+  // 日期：快捷按钮 + 记录用户选中的值（个别 WebView 回写不及时）
+  $('#inputDate').addEventListener('change', e => { e.target.dataset.picked = e.target.value; });
+  $('#inputDate').addEventListener('input', e => { e.target.dataset.picked = e.target.value; });
+  $('#dateQuick').addEventListener('click', e => {
+    const btn = e.target.closest('[data-quick]');
+    if (!btn) return;
+    const d = new Date();
+    d.setDate(d.getDate() - Number(btn.dataset.quick || 0));
+    const value = Core.todayStr(d);
+    $('#inputDate').value = value;
+    $('#inputDate').dataset.picked = value;
+  });
+
   $('#categoryChips').addEventListener('click', e => {
     const chip = e.target.closest('.chip');
     if (!chip) return;
@@ -868,6 +982,10 @@ function bindEvents() {
 
   // 流水
   $('#searchInput').addEventListener('input', renderRecords);
+  $('#recordFilterChips').addEventListener('click', e => {
+    const chip = e.target.closest('[data-filter]');
+    if (chip) setRecordFilter(chip.dataset.filter);
+  });
   $('#content').addEventListener('scroll', () => {
     if (currentView !== 'records') return;
     const el = $('#content');
@@ -931,12 +1049,15 @@ async function init() {
   appConfig.ai = Object.assign({ apiKey: '', baseUrl: '', model: '' }, (rawConfig && rawConfig.ai) || {});
 
   $('#inputDate').value = Core.todayStr();
+  $('#inputDate').dataset.picked = $('#inputDate').value;
   $('#chatInput').placeholder = '例如：我这个月餐饮花了多少？';
 
   bindEvents();
   renderSettings();
   renderCatList();
   renderCategoryChips();
+  syncTypeUI();
+  syncBucketUI();
   refreshAll();
   setView('dashboard');
 }

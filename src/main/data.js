@@ -27,6 +27,9 @@ function getDefaultData() {
       monthly: 1000,
       categories: {}
     },
+    reward: {
+      monthly: 0
+    },
     categories: ['餐饮', '交通', '购物', '娱乐', '居住', '医疗', '教育', '其他'],
     createdAt: new Date().toISOString()
   };

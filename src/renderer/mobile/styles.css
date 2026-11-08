@@ -25,11 +25,15 @@
   /* 安全区：Capacitor 安卓注入 --safe-area-inset-*，iOS 用 env() */
   --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+  --safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 html, body { height: 100%; }
+
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
 body {
   font-family: system-ui, -apple-system, "Roboto", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -52,18 +56,20 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .app {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  height: 100vh;          /* 老 WebView 兜底 */
+  height: 100dvh;         /* 键盘弹出 / 地址栏收起时正确缩放 */
   max-width: 560px;
   margin: 0 auto;
   position: relative;
   background: var(--bg);
+  overflow: hidden;
 }
 
 /* ============================ 顶部 AppBar ============================ */
 
 .appbar {
   flex-shrink: 0;
-  padding: calc(var(--safe-top) + 10px) 16px 10px;
+  padding: calc(var(--safe-top) + 10px) calc(16px + var(--safe-right, 0px)) 10px calc(16px + var(--safe-left, 0px));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -152,20 +158,29 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .balance-amount .unit { font-size: 20px; font-weight: 500; margin-right: 3px; letter-spacing: 0; }
 
 .balance-meta {
-  display: flex;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
   margin-top: 16px;
   position: relative;
   z-index: 1;
 }
 .balance-meta > div {
-  flex: 1;
+  min-width: 0;
   background: rgba(255, 255, 255, .16);
   border-radius: 12px;
   padding: 8px 10px;
 }
 .balance-meta span { display: block; font-size: 11.5px; opacity: .85; }
-.balance-meta strong { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.balance-meta strong {
+  display: block;
+  font-size: clamp(12.5px, 3.7vw, 14.5px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .balance-foot {
   margin-top: 12px;
@@ -175,30 +190,119 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   z-index: 1;
 }
 
+/* ============================ 奖励额度卡 ============================ */
+
+.reward-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  color: #fff;
+  background: linear-gradient(135deg, #5b2fc4, #9d72ff);
+  box-shadow: 0 8px 22px rgba(91, 47, 196, .22);
+  margin-bottom: 12px;
+}
+.reward-card.over { background: linear-gradient(135deg, #b3261e, #ef5350); box-shadow: 0 8px 22px rgba(179, 38, 30, .22); }
+.reward-card.idle { background: linear-gradient(135deg, #6b7280, #9aa3b2); box-shadow: 0 8px 22px rgba(80, 90, 105, .18); }
+.reward-card::after {
+  content: "";
+  position: absolute;
+  width: 140px; height: 140px;
+  right: -50px; top: -70px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .12);
+}
+.reward-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+.reward-label { font-size: 12.5px; opacity: .9; }
+.reward-tag {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .22);
+  white-space: nowrap;
+}
+.reward-amount {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -.5px;
+  line-height: 1.2;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+  position: relative;
+  z-index: 1;
+}
+.reward-amount .unit { font-size: 16px; font-weight: 500; margin-right: 3px; }
+.reward-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .26);
+  overflow: hidden;
+  margin-top: 10px;
+  position: relative;
+  z-index: 1;
+}
+.reward-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: #fff;
+  border-radius: 999px;
+  transition: width .35s cubic-bezier(.2, .8, .2, 1);
+}
+.reward-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  opacity: .92;
+  position: relative;
+  z-index: 1;
+  font-variant-numeric: tabular-nums;
+}
+.reward-hint {
+  margin-top: 8px;
+  font-size: 11.5px;
+  opacity: .85;
+  position: relative;
+  z-index: 1;
+}
+
 /* ============================ 统计小卡 ============================ */
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
 }
 .stat-card {
+  min-width: 0;
   background: var(--surface);
   border-radius: var(--radius-md);
-  padding: 12px 10px;
+  padding: 12px 12px;
   border: 1px solid var(--outline);
 }
 .stat-card .label { font-size: 11.5px; color: var(--on-surface-var); }
 .stat-card .value {
-  font-size: 16px;
+  font-size: clamp(14px, 4.4vw, 18px);
   font-weight: 600;
   margin-top: 3px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .stat-card .value.expense { color: var(--expense); }
 .stat-card .value.income { color: var(--income); }
+.stat-card .value.reward { color: #5b2fc4; }
 
 /* ============================ 卡片 ============================ */
 
@@ -232,21 +336,23 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .bar-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 11px;
   font-size: 12.5px;
 }
 .bar-row:last-child { margin-bottom: 0; }
 .bar-label {
-  width: 46px;
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  min-width: 38px;
+  max-width: 34%;
   color: var(--on-surface-var);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .bar-track {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 24px;
   height: 8px;
   background: var(--surface-2);
   border-radius: 999px;
@@ -254,10 +360,14 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 }
 .bar-fill { height: 100%; border-radius: 999px; transition: width .35s cubic-bezier(.2, .8, .2, 1); }
 .bar-value {
-  min-width: 84px;
+  flex: 0 0 auto;
+  max-width: 46%;
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--on-surface-var);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ============================ 每日趋势 ============================ */
@@ -309,8 +419,26 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   font-size: 18px;
   flex-shrink: 0;
 }
+.record-icon.reward { background: #f1e9ff; }
 .record-info { flex: 1; min-width: 0; }
-.record-cat { font-size: 14px; font-weight: 500; }
+.record-cat {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.record-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #efe6ff;
+  color: #5b2fc4;
+  font-size: 10px;
+  font-weight: 500;
+  vertical-align: 1px;
+}
 .record-note {
   font-size: 12px;
   color: var(--on-surface-var);
@@ -319,11 +447,44 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   text-overflow: ellipsis;
   margin-top: 1px;
 }
-.record-right { text-align: right; flex-shrink: 0; }
-.record-amount { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.record-right { text-align: right; flex-shrink: 0; max-width: 44%; }
+.record-amount {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .record-amount.expense { color: var(--expense); }
 .record-amount.income { color: var(--income); }
-.record-date { font-size: 11px; color: var(--on-surface-dim); margin-top: 1px; }
+.record-amount.reward { color: #5b2fc4; }
+.record-date { font-size: 11px; color: var(--on-surface-dim); margin-top: 1px; white-space: nowrap; }
+
+/* 流水筛选 */
+.filter-chips {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.filter-chips::-webkit-scrollbar { display: none; }
+.filter-chip {
+  flex: 0 0 auto;
+  padding: 7px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--outline);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--on-surface-var);
+  transition: all .15s;
+}
+.filter-chip.active {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary-deep);
+  font-weight: 600;
+}
 
 .search-wrap {
   display: flex;
@@ -453,10 +614,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   border-color: var(--primary);
   background: var(--surface);
 }
-.field textarea { min-height: 88px; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+#fbContent { font-family: inherit; font-size: 14px; line-height: 1.65; min-height: 108px; }
 
-.field-row { display: flex; gap: 10px; }
-.field-row > * { flex: 1; }
+.field-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.field-row > * { flex: 1 1 0; min-width: 0; }
 
 .btn {
   display: inline-flex;
@@ -526,18 +687,23 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .cat-budget-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-bottom: 10px;
 }
 .cat-budget-row > span:first-child {
-  width: 52px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  min-width: 40px;
+  max-width: 28%;
   font-size: 13px;
   color: var(--on-surface-var);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cat-budget-row input {
-  width: 100px;
-  padding: 9px 12px;
+  flex: 0 0 auto;
+  width: 92px;
+  padding: 9px 10px;
   border: 1px solid var(--outline);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -546,10 +712,14 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   text-align: right;
 }
 .cat-budget-row .used {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   text-align: right;
   font-size: 11.5px;
   color: var(--on-surface-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .cat-budget-row .used.over { color: var(--expense); font-weight: 600; }
 
@@ -574,6 +744,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 }
 .nav-btn {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -584,7 +755,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   transition: color .15s;
 }
 .nav-icon-wrap {
-  width: 56px;
+  width: 52px;
   height: 28px;
   border-radius: 999px;
   display: flex;
@@ -593,6 +764,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   transition: background .18s;
 }
 .nav-icon-wrap svg { width: 21px; height: 21px; }
+.nav-btn > span:last-child {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .nav-btn.active { color: var(--primary-deep); font-weight: 600; }
 .nav-btn.active .nav-icon-wrap { background: var(--primary-soft); }
 .nav-btn:active .nav-icon-wrap { background: rgba(11, 87, 208, .1); }
@@ -617,11 +794,14 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   bottom: 0;
   max-width: 560px;
   margin: 0 auto;
-  max-height: 90dvh;
+  max-height: calc(100vh - var(--safe-top) - 12px);
+  max-height: calc(100dvh - var(--safe-top) - 12px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: var(--surface);
   border-radius: 26px 26px 0 0;
-  padding: 8px 20px calc(18px + var(--safe-bottom));
+  padding: 8px calc(18px + var(--safe-right)) calc(16px + var(--safe-bottom)) calc(18px + var(--safe-left));
   transform: translateY(102%);
   transition: transform .28s cubic-bezier(.2, .9, .2, 1);
   z-index: 41;
@@ -654,6 +834,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   font-size: 14px;
   color: var(--on-surface-var);
   transition: all .16s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .seg-btn.active {
   background: var(--surface);
@@ -663,6 +846,26 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 }
 .seg-btn.active[data-type="expense"] { color: var(--expense); }
 .seg-btn.active[data-type="income"] { color: var(--income); }
+
+/* 归属切换（生活 / 奖励） */
+.bucket-seg { margin-top: -6px; margin-bottom: 8px; }
+.seg-btn.active[data-bucket="life"] { color: var(--primary-deep); }
+.seg-btn.active[data-bucket="reward"] { color: #5b2fc4; }
+.bucket-seg .seg-btn.active[data-bucket="reward"] { box-shadow: 0 1px 3px rgba(91, 47, 196, .25); }
+.bucket-hint { margin: -2px 2px 14px; font-size: 11.5px; }
+
+/* 日期快捷按钮 */
+.date-quick { display: flex; gap: 8px; margin-top: 8px; }
+.date-quick button {
+  flex: 1;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--outline);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  color: var(--on-surface-var);
+}
+.date-quick button:active { background: var(--primary-soft); color: var(--primary-deep); }
 
 /* 金额输入 */
 .amount-input {
@@ -753,25 +956,29 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   display: none;
   align-items: center;
   justify-content: center;
-  padding: 28px;
+  padding: 20px;
   z-index: 60;
 }
 .dialog-mask.show { display: flex; }
 .dialog {
   background: var(--surface);
-  border-radius: 26px;
-  padding: 24px 22px 16px;
+  border-radius: 24px;
+  padding: 22px 20px 14px;
   width: 100%;
-  max-width: 340px;
+  max-width: min(340px, 100%);
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
   box-shadow: 0 20px 50px rgba(16, 24, 40, .24);
 }
 .dialog h3 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
-.dialog p { font-size: 14px; color: var(--on-surface-var); white-space: pre-wrap; line-height: 1.6; }
+.dialog p { font-size: 14px; color: var(--on-surface-var); white-space: pre-wrap; line-height: 1.6; word-break: break-word; }
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 6px;
   margin-top: 18px;
+  flex-wrap: wrap;
 }
 .dialog-actions button {
   padding: 9px 16px;
@@ -804,9 +1011,48 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 
 .hidden { display: none !important; }
 
-/* 小屏微调 */
+/* ============================ 屏幕适配 ============================ */
+
+/* 小屏（320~360 的老机型、横屏分屏） */
 @media (max-width: 360px) {
-  .balance-amount { font-size: 33px; }
-  .stat-card .value { font-size: 14px; }
-  .bar-value { min-width: 72px; }
+  body { font-size: 14.5px; }
+  .content { padding-left: 12px; padding-right: 12px; }
+  .appbar { padding-left: calc(12px + var(--safe-left, 0px)); padding-right: calc(12px + var(--safe-right, 0px)); }
+  .appbar-title { font-size: 19px; }
+  .balance-card { padding: 16px; border-radius: 18px; }
+  .balance-amount { font-size: 30px; }
+  .balance-meta { gap: 6px; }
+  .balance-meta > div { padding: 7px 8px; }
+  .reward-card { padding: 16px; border-radius: 18px; }
+  .reward-amount { font-size: 26px; }
+  .stat-card { padding: 10px; }
+  .card { padding: 14px; border-radius: 18px; }
+  .cat-budget-row input { width: 82px; }
+  .nav-btn { font-size: 10px; }
+  .nav-icon-wrap { width: 44px; }
+  .nav-icon-wrap svg { width: 19px; height: 19px; }
+  .btn { padding: 0 14px; font-size: 14px; }
+  .btn-row .btn { min-width: 0; }
+  .sheet { padding-left: calc(14px + var(--safe-left)); padding-right: calc(14px + var(--safe-right)); }
+  .dialog { padding: 20px 18px 12px; }
+  .toast { max-width: 90vw; }
+}
+
+/* 平板 / 横屏宽屏：卡片按两列排，不浪费横向空间 */
+@media (min-width: 600px) {
+  .content { padding-left: 20px; padding-right: 20px; }
+  .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .balance-amount { font-size: 42px; }
+  .reward-amount { font-size: 34px; }
+}
+
+/* 横屏矮屏：压缩头部和图表高度，保证首屏能看到余额 */
+@media (max-height: 480px) and (orientation: landscape) {
+  .appbar { padding-top: calc(var(--safe-top) + 6px); padding-bottom: 6px; }
+  .appbar-title { font-size: 18px; }
+  .balance-card { padding: 14px 18px; }
+  .balance-amount { font-size: 28px; }
+  .balance-foot { display: none; }
+  .trend-chart { height: 78px; }
+  .chat-input-row { padding-bottom: calc(6px + var(--safe-bottom)); }
 }

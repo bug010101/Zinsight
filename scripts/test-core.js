@@ -147,4 +147,72 @@ test('categoryBudgetRows 判断超支', () => {
   assert.strictEqual(rows[0].pct, 100);
 });
 
+// ========== 奖励系统 ==========
+
+const mixed = sample.concat([
+  { id: 'e', type: 'expense', amount: 80, category: '娱乐', note: '买游戏', date: '2026-11-05', bucket: 'reward', createdAt: '2026-11-05T04:00:00.000Z' },
+  { id: 'f', type: 'expense', amount: 20, category: '餐饮', note: '奶茶', date: '2026-11-06', bucket: 'reward', createdAt: '2026-11-06T04:00:00.000Z' }
+]);
+
+test('summarize 拆分生活/奖励支出', () => {
+  const s = Core.summarize(mixed);
+  assert.strictEqual(s.lifeExpense, 125.5);
+  assert.strictEqual(s.rewardExpense, 100);
+  assert.strictEqual(s.expense, 225.5);
+  // 分类汇总只统计生活支出，奖励单独一份
+  assert.strictEqual(s.catSpent['娱乐'], undefined);
+  assert.strictEqual(s.rewardCatSpent['娱乐'], 80);
+});
+
+test('奖励消费不影响可用余额，只扣奖励额度', () => {
+  const s = Core.summarize(mixed);
+  assert.strictEqual(Core.balanceOf(1000, s), 1374.5);          // 与没有奖励消费时一致
+  assert.strictEqual(Core.rewardBalanceOf(150, s), 50);
+  assert.strictEqual(Core.rewardBalanceOf(60, s), -40);
+  assert.strictEqual(Core.rewardUsedPct(200, s), 50);
+  assert.strictEqual(Core.rewardUsedPct(0, s), 0);
+});
+
+test('bucket 默认 life，老数据不炸', () => {
+  const d = Core.normalize({ records: [{ type: 'expense', amount: 10, category: '餐饮' }] });
+  assert.strictEqual(d.records[0].bucket, 'life');
+  assert.strictEqual(d.reward.monthly, 0);
+  assert.strictEqual(Core.isReward(d.records[0]), false);
+  assert.strictEqual(Core.bucketLabel({ type: 'expense', bucket: 'reward' }), '奖励');
+});
+
+test('收入永远算生活账户', () => {
+  assert.strictEqual(Core.isReward({ type: 'income', bucket: 'reward' }), false);
+});
+
+test('CSV 账户列能往返', () => {
+  const csv = Core.buildFullCsv(mixed);
+  const parsed = Core.parseCsv(csv);
+  assert.strictEqual(parsed.success, true);
+  const rewardRows = parsed.records.filter(r => r.bucket === 'reward');
+  assert.strictEqual(rewardRows.length, 2);
+  assert.strictEqual(parsed.records.find(r => r.id && r.note === '午餐').bucket, 'life');
+});
+
+test('CSV 没有账户列时按生活导入（向后兼容）', () => {
+  const parsed = Core.parseCsv('date,type,category,amount,note\n2026-11-01,expense,餐饮,10,午饭\n');
+  assert.strictEqual(parsed.success, true);
+  assert.strictEqual(parsed.records[0].bucket, 'life');
+});
+
+test('sortRecords 支持按账户筛选', () => {
+  assert.strictEqual(Core.sortRecords(mixed, '', 'reward').length, 2);
+  assert.strictEqual(Core.sortRecords(mixed, '', 'life').length, 4);
+  assert.strictEqual(Core.sortRecords(mixed, '').length, 6);
+  // 收入只在生活里
+  assert.ok(Core.sortRecords(mixed, '', 'life').every(r => r.type === 'income' || !Core.isReward(r)));
+});
+
+test('流水时间以记账日期为准，不是创建时间', () => {
+  const d = new Date();
+  assert.strictEqual(Core.formatRecordTime({ date: Core.todayStr(d), createdAt: d.toISOString() }).indexOf('今天'), 0);
+  assert.strictEqual(Core.formatRecordTime({ date: '2026-11-01', createdAt: '2026-11-08T04:00:00.000Z' }), '11-01');
+  assert.strictEqual(Core.formatRecordTime({ date: '2026-11-01' }), '11-01');
+});
+
 console.log(`\n${passed} 项通过` + (process.exitCode ? '，存在失败项' : '，全部通过'));

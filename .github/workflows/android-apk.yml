@@ -4,7 +4,7 @@ name: Android APK
 # 安卓安装包（APK）打包工作流
 #
 # 触发方式两种：
-#   1) 打 tag（v1.2.0）→ 自动打包并挂到 GitHub Release
+#   1) 打 tag（v1.4.0）→ 自动打包并挂到 GitHub Release
 #   2) 手动触发（Actions 页面点 Run workflow）→ 只产出 Artifact，方便随时出包
 #
 # 产物是 debug 签名的 APK：
@@ -50,15 +50,26 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.ref }}
 
-      - name: 读取版本号
-        id: version
-        run: echo "value=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
-
       - name: 安装 Node ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+
+      # 放在 setup-node 之后，不依赖 runner 自带的 Node；顺便校验 tag 与包内版本一致
+      - name: 读取版本号并校验 tag
+        id: version
+        run: |
+          VERSION=$(node -p 'require("./package.json").version')
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "package.json: $VERSION"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME#v}"
+            if [ "$TAG" != "$VERSION" ]; then
+              echo "::error::tag $GITHUB_REF_NAME 与 package.json 版本 $VERSION 不一致"
+              exit 1
+            fi
+          fi
 
       - name: 安装 JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
@@ -125,6 +136,15 @@ jobs:
           npx cap add android
           node scripts/android-version.js
 
+      # android-version.js 为了兼容模板变化会静默跳过，这里兜底确认版本真的写进去了，
+      # 避免产出一个 versionName 还停在 1.0 的 APK
+      - name: 校验 APK 版本已写入
+        run: |
+          if ! grep -q "versionName \"${{ steps.version.outputs.value }}\"" android/app/build.gradle; then
+            echo "::error::versionName 未同步成 ${{ steps.version.outputs.value }}，请检查 scripts/android-version.js 与 Capacitor 模板"
+            exit 1
+          fi
+
       - name: 替换启动图标
         run: node scripts/android-icons.js
 
@@ -160,7 +180,21 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      # 打 tag 时同时挂到 Release，和桌面端产物放在一起
+      # 打 tag 时同时挂到 Release，和桌面端产物放在一起。
+      # 两个 workflow 会并发跑，先确保 Release 存在，避免同时创建撞车
+      - name: 确保 Release 存在
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release 已存在"
+          else
+            # 若桌面端 workflow 抢先创建，create 会失败；此时再 view 一次确认确实存在
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes \
+              || gh release view "$GITHUB_REF_NAME" >/dev/null
+          fi
+
       - name: 挂到 Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

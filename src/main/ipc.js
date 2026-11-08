@@ -7,6 +7,9 @@ const { ipcMain, dialog } = require('electron');
 const fs = require('fs');
 const { readData, saveData, readConfig, saveConfig } = require('./data');
 
+/** 生活 / 奖励 两种账户，和 ledger-core 里的约定一致 */
+const bucketLabel = r => (r && r.type === 'expense' && r.bucket === 'reward') ? '奖励' : '生活';
+
 function registerIpc(mainWindow) {
   // 数据读写
   ipcMain.handle('data:read', () => readData());
@@ -33,14 +36,14 @@ function registerIpc(mainWindow) {
     if (result.canceled || !result.filePath) return { success: false, canceled: true };
 
     const BOM = '\uFEFF';
-    const header = '日期,类型,分类,金额,备注\n';
+    const header = '日期,类型,分类,金额,备注,账户\n';
     const rows = records.map(r => {
       const date = r.date || '';
       const type = r.type === 'income' ? '收入' : '支出';
       const category = (r.category || '').replace(/,/g, '，');
       const amount = r.amount || 0;
       const note = (r.note || '').replace(/,/g, '，').replace(/\n/g, ' ');
-      return `${date},${type},${category},${amount},${note}`;
+      return `${date},${type},${category},${amount},${note},${bucketLabel(r)}`;
     }).join('\n');
 
     fs.writeFileSync(result.filePath, BOM + header + rows, 'utf-8');
@@ -83,10 +86,11 @@ function registerIpc(mainWindow) {
       fs.writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf-8');
     } else {
       const BOM = '\uFEFF';
-      const header = 'id,date,type,category,amount,note\n';
+      const header = 'id,date,type,category,amount,note,bucket\n';
       const rows = filtered.map(r => {
         const note = (r.note || '').replace(/,/g, '，').replace(/\n/g, ' ').replace(/"/g, "'");
-        return `${r.id},"${r.date}","${r.type}","${r.category}",${r.amount},"${note}"`;
+        const bucket = r.type === 'expense' && r.bucket === 'reward' ? 'reward' : 'life';
+        return `${r.id},"${r.date}","${r.type}","${r.category}",${r.amount},"${note}","${bucket}"`;
       }).join('\n');
       fs.writeFileSync(result.filePath, BOM + header + rows, 'utf-8');
     }
@@ -134,7 +138,8 @@ function registerIpc(mainWindow) {
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
       const colIdx = {};
       headers.forEach((h, i) => {
-        if (h.includes('date') || h === '日期') colIdx.date = i;
+        if (h.includes('bucket') || h.includes('account') || h === '账户' || h === '归属') colIdx.bucket = i;
+        else if (h.includes('date') || h === '日期') colIdx.date = i;
         else if (h.includes('type') || h === '类型') colIdx.type = i;
         else if (h.includes('category') || h === '分类') colIdx.category = i;
         else if (h.includes('amount') || h === '金额') colIdx.amount = i;
@@ -158,6 +163,7 @@ function registerIpc(mainWindow) {
         const typeRaw = get(colIdx.type);
         const type = typeRaw === '收入' || typeRaw === 'income' ? 'income' : 'expense';
         const includeRaw = get(colIdx.include, 'true').toLowerCase();
+        const accountRaw = get(colIdx.bucket).toLowerCase();
 
         records.push({
           id: 'rec_' + Date.now() + '_import_' + i,
@@ -166,6 +172,7 @@ function registerIpc(mainWindow) {
           category: get(colIdx.category),
           amount: parseFloat(get(colIdx.amount)) || 0,
           note: get(colIdx.note),
+          bucket: type === 'expense' && (accountRaw === 'reward' || accountRaw === '奖励') ? 'reward' : 'life',
           includeInBalance: includeRaw !== 'false' && includeRaw !== '0',
           createdAt: new Date().toISOString()
         });

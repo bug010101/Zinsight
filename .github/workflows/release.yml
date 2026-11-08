@@ -5,9 +5,52 @@ on:
     tags:
       - 'v*'
 
+# 同一个 tag 重复推送时只保留最新一次，避免重复上传产物
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # 先校验 tag 与 package.json 版本一致，并提前建好 Release：
+  # 否则三个平台 job 并发调用 gh-release 时可能同时创建同一个 Release 而失败
+  prepare:
+    name: 校验版本并创建 Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: 校验 tag 与 package.json 版本一致
+        run: |
+          VERSION=$(node -p 'require("./package.json").version')
+          echo "package.json: $VERSION / tag: $GITHUB_REF_NAME"
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "::error::tag 与 package.json 版本不一致，请先同步版本号"
+            exit 1
+          fi
+
+      - name: 创建 Release（如不存在）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release 已存在"
+          else
+            # 若另一个 workflow 抢先创建，create 会失败；此时再 view 一次确认确实存在
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes \
+              || gh release view "$GITHUB_REF_NAME" >/dev/null
+          fi
+
   # 打 macOS 包
   build-mac:
+    needs: prepare
     runs-on: macos-latest
     permissions:
       contents: write
@@ -17,11 +60,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
+
+      - name: 逻辑自测
+        run: npm run test:core
 
       - name: Build for macOS
         run: npx electron-builder --mac --publish never
@@ -32,13 +78,14 @@ jobs:
       - name: Upload dmg to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/*.dmg
+          files: dist/*.dmg
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # 打 Windows 包
   build-windows:
+    needs: prepare
     runs-on: windows-latest
     permissions:
       contents: write
@@ -48,11 +95,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
+
+      - name: 逻辑自测
+        run: npm run test:core
 
       - name: Build for Windows
         run: npx electron-builder --win --publish never
@@ -63,13 +113,14 @@ jobs:
       - name: Upload exe to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/*.exe
+          files: dist/*.exe
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # 打 Linux 包
   build-linux:
+    needs: prepare
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -79,11 +130,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
+
+      - name: 逻辑自测
+        run: npm run test:core
 
       - name: Build for Linux
         run: npx electron-builder --linux --publish never
@@ -94,7 +148,7 @@ jobs:
       - name: Upload deb to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/*.deb
+          files: dist/*.deb
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

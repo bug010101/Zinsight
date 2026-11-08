@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#f2f4f8">
 <meta name="format-detection" content="telephone=no">
 <title>Zinsight 记账</title>
@@ -41,10 +41,29 @@
         <div class="balance-foot">本月还剩 <span id="daysLeft">30</span> 天，别花超了</div>
       </div>
 
+      <div class="reward-card" id="rewardCard">
+        <div class="reward-head">
+          <span class="reward-label">本月奖励额度</span>
+          <span class="reward-tag" id="rewardTag">奖励自己</span>
+        </div>
+        <div class="reward-amount"><span class="unit">¥</span><span id="rewardLeft">0.00</span></div>
+        <div class="reward-track"><i class="reward-fill" id="rewardFill"></i></div>
+        <div class="reward-meta">
+          <span>额度 ¥<span id="rewardTotal">0.00</span></span>
+          <span>已用 ¥<span id="rewardSpent">0.00</span></span>
+          <span>日均 ¥<span id="rewardDailyAvg">0.00</span></span>
+        </div>
+        <div class="reward-hint" id="rewardHint">奖励消费只扣这份额度，不影响生活余额</div>
+      </div>
+
       <div class="stat-grid">
         <div class="stat-card">
-          <div class="label">本月支出</div>
+          <div class="label">生活支出</div>
           <div class="value expense" id="monthExpense">¥0.00</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">奖励支出</div>
+          <div class="value reward" id="monthReward">¥0.00</div>
         </div>
         <div class="stat-card">
           <div class="label">本月收入</div>
@@ -75,6 +94,11 @@
 
     <!-- ---------- 流水 ---------- -->
     <section class="view" data-view="records">
+      <div class="filter-chips" id="recordFilterChips">
+        <button class="filter-chip active" data-filter="all">全部</button>
+        <button class="filter-chip" data-filter="life">生活</button>
+        <button class="filter-chip" data-filter="reward">奖励</button>
+      </div>
       <div class="search-wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/>
@@ -104,6 +128,11 @@
         <h3>近 6 个月支出对比</h3>
         <div id="monthCompareChart"></div>
       </div>
+
+      <div class="card">
+        <h3>本月奖励消费分布</h3>
+        <div id="rewardCategoryChart"></div>
+      </div>
     </section>
 
     <!-- ---------- AI 分析 ---------- -->
@@ -127,10 +156,15 @@
       <div class="card">
         <h3>预算设置</h3>
         <div class="field">
-          <label>月度总预算（¥）</label>
+          <label>月度生活预算（¥）</label>
           <input type="number" id="setMonthlyBudget" inputmode="decimal" step="0.01" min="0" placeholder="0">
         </div>
-        <label class="section-title" style="margin-left:0;">分类预算</label>
+        <div class="field">
+          <label>月度奖励额度（¥）</label>
+          <input type="number" id="setRewardBudget" inputmode="decimal" step="0.01" min="0" placeholder="0">
+          <p class="hint" style="margin-top:6px;">每月 1 号自动恢复，只用于「奖励消费」，不占生活预算。</p>
+        </div>
+        <label class="section-title" style="margin-left:0;">分类预算（只统计生活消费）</label>
         <div id="catBudgetSettings"></div>
         <button class="btn btn-filled btn-block" id="btnSaveBudget" style="margin-top:10px;">保存预算</button>
       </div>
@@ -274,6 +308,12 @@
     <button class="seg-btn" data-type="income">收入</button>
   </div>
 
+  <div class="segmented bucket-seg" id="bucketSwitch">
+    <button class="seg-btn active" data-bucket="life">生活消费</button>
+    <button class="seg-btn" data-bucket="reward">奖励消费</button>
+  </div>
+  <p class="hint bucket-hint" id="bucketHint">生活消费走月度预算，正常扣可用余额</p>
+
   <div class="amount-input">
     <span class="currency">¥</span>
     <input type="number" id="inputAmount" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
@@ -290,6 +330,11 @@
   <div class="field">
     <label>日期</label>
     <input type="date" id="inputDate">
+    <div class="date-quick" id="dateQuick">
+      <button type="button" data-quick="0">今天</button>
+      <button type="button" data-quick="1">昨天</button>
+      <button type="button" data-quick="2">前天</button>
+    </div>
   </div>
 
   <div class="switch-row hidden" id="includeBalanceRow">

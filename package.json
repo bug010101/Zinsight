@@ -1,7 +1,7 @@
 {
   "name": "Zinsight",
   "productName": "Zinsight",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "轻量级个人记账应用（桌面端 Electron + 安卓端 Capacitor）",
   "license": "MIT",
   "author": {
