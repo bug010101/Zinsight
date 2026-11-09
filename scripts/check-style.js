@@ -142,7 +142,7 @@ function collectFiles(dir, output) {
 const files = collectFiles(SOURCE_DIR, []);
 files.push(path.join(ROOT, 'main.js'));
 const sources = new Map(files.map(file => [file, fs.readFileSync(file, 'utf8')]));
-const relative = file => path.relative(ROOT, file);
+const relative = file => path.relative(ROOT, file).split(path.sep).join('/');
 const locate = (source, position) => source.slice(0, position).split('\n').length;
 
 console.log('源码规范检查');
