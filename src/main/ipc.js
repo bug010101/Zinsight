@@ -62,7 +62,6 @@ function registerIpc(mainWindow) {
     // CSV / JSON 的生成同样只走共享内核，避免两端格式慢慢漂移
     const content = format === 'json'
       ? Core.buildRangeJson(filtered, {
-        exportTime: new Date().toISOString(),
         startDate,
         endDate,
         recordCount: filtered.length,

@@ -53,6 +53,14 @@
     return `${date.getFullYear()}-${padTwoDigits(date.getMonth() + 1)}-${padTwoDigits(date.getDate())}`;
   }
 
+  /** 本地时区的日期时间字符串，用于导出文件的 meta。
+   *  不能用 toISOString()：那是 UTC，比北京时间晚 8 小时，会让用户看到的导出时间和实际对不上。 */
+  function formatLocalDateTime(referenceDate) {
+    const date = referenceDate || new Date();
+    return `${date.getFullYear()}-${padTwoDigits(date.getMonth() + 1)}-${padTwoDigits(date.getDate())} `
+      + `${padTwoDigits(date.getHours())}:${padTwoDigits(date.getMinutes())}:${padTwoDigits(date.getSeconds())}`;
+  }
+
   /** 2026-11 */
   function monthKey(referenceDate) {
     const date = referenceDate || new Date();
@@ -406,7 +414,7 @@
   function buildRangeJson(records, meta) {
     return JSON.stringify({
       meta: Object.assign({
-        exportTime: new Date().toISOString(),
+        exportTime: formatLocalDateTime(),
         recordCount: records.length
       }, meta || {}),
       records
@@ -483,6 +491,18 @@
     }
 
     if (!records.length) return { success: false, error: '没有解析到有效记录' };
+
+    // 导入的历史记录没有精确创建时间，按「记账日期 + CSV 行序」给每条补一个 createdAt。
+    // 否则所有记录都是导入这一刻、完全相等，列表排序会退化成依赖 CSV 文件顺序，
+    // 出现「最新的却显示在最底下」之类的错乱。
+    records.forEach((record, index) => {
+      const base = new Date(`${record.date}T12:00:00`);
+      if (!isNaN(base.getTime())) {
+        base.setSeconds(base.getSeconds() + index);
+        record.createdAt = base.toISOString();
+      }
+    });
+
     return { success: true, records };
   }
 
@@ -534,7 +554,7 @@
     CATEGORY_ICONS,
     BUCKET_LIFE, BUCKET_REWARD, BUCKET_LABEL,
     // 日期
-    todayStr, monthKey, monthStartStr, daysInMonth, lastMonths, normalizeDate,
+    todayStr, monthKey, monthStartStr, daysInMonth, lastMonths, normalizeDate, formatLocalDateTime,
     // 基础
     padTwoDigits, formatMoney, generateId, categoryIcon, defaultData, defaultConfig, normalize,
     isReward, bucketOf, bucketLabel,
