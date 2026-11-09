@@ -111,7 +111,8 @@ export async function saveSheet() {
       date: date,
       bucket: bucket,
       includeInBalance: includeInBalance,
-      createdAt: Core.formatLocalDateTime()
+      createdAt: Core.formatLocalDateTime(),
+      hasTime: true
     });
     showToast(bucket === 'reward' ? '已记一笔奖励消费' : '已记一笔');
   }
@@ -147,7 +148,7 @@ export function openDetail(record) {
     ['记账日期', record.date],
     ['类型', record.type === 'income' ? '收入' : '支出'],
     ['分类', record.category],
-    ['金额', (record.type === 'income' ? '+' : '-') + '¥' + Core.formatMoney(record.amount)],
+    ['金额', (record.type === 'income' ? '收入' : '支付') + ' ¥' + Core.formatMoney(record.amount)],
     ['备注', record.note || '—'],
     ['归属', Core.bucketLabel(record)],
     ['完整记录时间', Core.formatFullDateTime(record)],

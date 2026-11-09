@@ -257,8 +257,9 @@
             <pre>日期,类型,分类,金额,备注,账户
 2026-11-01,支出,餐饮,25.5,午餐,生活
 2026-11-05,支出,娱乐,199,买个新游戏,奖励</pre>
-            <p><code>日期/date</code> YYYY-MM-DD 必填 · <code>类型/type</code> 支出/expense、收入/income · <code>分类/category</code> 必填 · <code>金额/amount</code> 必填 · <code>备注/note</code> 可选 · <code>账户/bucket</code> 生活/life、奖励/reward，不写默认生活</p>
+            <p><code>日期/date</code> YYYY-MM-DD 必填（可带秒级时间戳） · <code>类型/type</code> 支出/expense、收入/income · <code>分类/category</code> 必填 · <code>金额/amount</code> 必填 · <code>备注/note</code> 可选 · <code>账户/bucket</code> 生活/life、奖励/reward，不写默认生活 · <code>时间/created_at</code> 可选</p>
             <p style="margin-top:6px;color:var(--on-surface-dim);">💡 中英文表头都认；「导出全部 CSV」的文件可直接导回。导入是追加，不会覆盖；选不到文件时可用「粘贴文本」。</p>
+            <p style="margin-top:6px;color:var(--on-surface-dim);">💡 记录时间只有精确到秒才保留；没给、只有日期或只到分，统一补成该记账日当天 10:00。内置导出不带时间列，导回来按 10:00 处理。</p>
           </div>
         </details>
 

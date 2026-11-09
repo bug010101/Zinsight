@@ -135,7 +135,7 @@ export function renderRecentList() {
 /* ============================ 流水 ============================ */
 
 export function recordItemHtml(record) {
-  const sign = record.type === 'expense' ? '-' : '+';
+  const direction = record.type === 'expense' ? '支付' : '收入';
   const isReward = Core.isReward(record);
   const selectable = state.selectionMode && state.currentView === 'records';
   const checked = selectable && state.selectedIds.indexOf(record.id) >= 0;
@@ -149,7 +149,7 @@ export function recordItemHtml(record) {
         <div class="record-note">${escapeHtml(record.note || '—')}</div>
       </div>
       <div class="record-right">
-        <div class="record-amount ${record.type}${isReward ? ' reward' : ''}">${sign}¥${Core.formatMoney(record.amount)}</div>
+        <div class="record-amount ${record.type}${isReward ? ' reward' : ''}">${direction} ¥${Core.formatMoney(record.amount)}</div>
         <div class="record-date">${escapeHtml(Core.formatRecordTime(record))}</div>
       </div>
     </div>`;
@@ -162,7 +162,7 @@ export function recordItemHtml(record) {
         <div class="record-note">${escapeHtml(record.note || '—')}</div>
       </div>
       <div class="record-right">
-        <div class="record-amount ${record.type}${isReward ? ' reward' : ''}">${sign}¥${Core.formatMoney(record.amount)}</div>
+        <div class="record-amount ${record.type}${isReward ? ' reward' : ''}">${direction} ¥${Core.formatMoney(record.amount)}</div>
         <div class="record-date">${escapeHtml(Core.formatRecordTime(record))}</div>
       </div>
     </div>`;

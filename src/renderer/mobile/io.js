@@ -2,9 +2,11 @@
  * 安卓端 · CSV / JSON 导入导出与批量删除
  * ES 模块：由 app.js 作为 build:www 的打包入口统一 bundle。
  */
+import { jsPDF } from 'jspdf';
 import { persist, refreshAll } from './data.js';
 import { Core, NATIVE } from './deps.js';
-import { saveAndShare } from './platform.js';
+import { saveAndShare, saveAndShareBytes } from './platform.js';
+import { renderReceiptCanvas } from './receipt.js';
 import { state } from './state.js';
 import { queryElement, confirmDialog, showToast } from './ui.js';
 import { updateAppbar } from './views.js';
@@ -57,12 +59,12 @@ export async function exportByRange(format) {
 }
 
 /**
- * 导出账单（HTML 形式，离线、零依赖）。
- * 安卓没有可用的 @capacitor/print（官方包未发布到当前 registry，社区版仅支持旧版
- * Capacitor，且纯 JS 的 PDF 库无法正确渲染中文需内嵌数 MB 字体），所以账单复用与
- * CSV 导出同源的「写缓存 + 系统分享」通道，生成一个自包含的 HTML 文件（内联样式、
- * 中文用系统字体正常显示），在微信 / QQ / 文件管理里都能打开，浏览器里也能直接打印成 PDF。
- * 桌面端则用 Chromium 原生 printToPDF 生成真正的 .pdf。
+ * 导出账单：在离线环境中生成真正的 PDF 小票。
+ * 思路：用 Canvas 2D 把「超市小票」画出来（系统字体天然支持中文、样式完全可控、
+ * 美观），再交给 jspdf 包装成 .pdf，最后走「写缓存 + 系统分享」通道分享。
+ * 这样既不依赖 @capacitor/print（官方包未发布到当前 registry），也不需要在包里
+ * 内嵌数 MB 的中文字体（纯 JS PDF 库无字体就无法渲染中文）。桌面端则用 Chromium
+ * 原生 printToPDF 生成 .pdf，两端共用 buildReceiptModel 的口径与样式。
  *
  * @param {boolean} useSelection 是否仅导出多选勾选的记录；为 false 时导出全部记录。
  */
@@ -84,9 +86,16 @@ export async function exportBill(useSelection) {
     }
     if (!records.length) { showToast('没有可导出的记录'); return; }
 
-    const html = Core.buildBillHtml(records, { scope });
-    const name = `账单_${Core.todayStr()}.html`;
-    const result = await saveAndShare(name, html, 'text/html');
+    const model = Core.buildReceiptModel(records, { scope });
+    const { canvas, width, height } = renderReceiptCanvas(model);
+    const dataUrl = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ unit: 'px', format: [width, height], compress: true });
+    pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
+    const dataUri = pdf.output('datauristring');
+    const pdfBase64 = dataUri.substring(dataUri.indexOf(',') + 1);
+
+    const name = `账单_${Core.todayStr()}.pdf`;
+    const result = await saveAndShareBytes(pdfBase64, name, 'application/pdf');
     reportExportResult(name, records.length, result);
   } catch (caughtError) {
     showToast('导出失败：' + ((caughtError && caughtError.message) || '未知错误'));
@@ -103,6 +112,10 @@ export async function importCsvText(text) {
     okText: '导入'
   });
   if (!ok) return;
+
+  // 多次导入时让 importSeq 全局递增，避免不同批次的 CSV 行序在排序时相互穿插
+  const maxSeq = state.appData.records.reduce((max, record) => Math.max(max, record.importSeq || 0), 0);
+  parsed.records.forEach((record, index) => { record.importSeq = maxSeq + index + 1; });
 
   state.appData.records.push.apply(state.appData.records, parsed.records);
   await persist();

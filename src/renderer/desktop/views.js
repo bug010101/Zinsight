@@ -126,20 +126,9 @@ const PAGE_SIZE = 20;
 
 function getSortedFilteredRecords() {
   const keyword = document.getElementById('searchInput').value.toLowerCase();
-  return [...appData.records]
-    .filter(record => {
-      if (recordFilter === 'life' && isReward(record)) return false;
-      if (recordFilter === 'reward' && !isReward(record)) return false;
-      if (!keyword) return true;
-      return (record.note && record.note.toLowerCase().includes(keyword)) ||
-             (record.category && record.category.toLowerCase().includes(keyword));
-    })
-    .sort((firstRecord, secondRecord) => {
-      // 优先按 createdAt 时间戳倒序，旧数据没有 createdAt 就按 date 排序
-      const firstTimestamp = firstRecord.createdAt || firstRecord.date;
-      const secondTimestamp = secondRecord.createdAt || secondRecord.date;
-      return String(secondTimestamp).localeCompare(String(firstTimestamp));
-    });
+  const bucket = recordFilter === 'all' ? null : recordFilter;
+  // 共用共享内核的排序：带秒级时间的倒序，无秒级时间的 CSV 导入严格按导入行序（增序）
+  return Core.sortRecords(appData.records, keyword, bucket);
 }
 
 function setRecordFilter(filter) {
@@ -193,7 +182,7 @@ function renderRecordPage() {
         <div class="record-note">${record.note || '—'}</div>
       </div>
       <div class="record-date">${formatRecordTime(record)}</div>
-      <div class="record-amount ${record.type}">${record.type === 'expense' ? '-' : '+'}¥${formatMoney(record.amount)}</div>
+      <div class="record-amount ${record.type}">${record.type === 'expense' ? '支付' : '收入'} ¥${formatMoney(record.amount)}</div>
     </div>`;
     }
     return `
@@ -204,7 +193,7 @@ function renderRecordPage() {
         <div class="record-note">${record.note || '—'}</div>
       </div>
       <div class="record-date">${formatRecordTime(record)}</div>
-      <div class="record-amount ${record.type}">${record.type === 'expense' ? '-' : '+'}¥${formatMoney(record.amount)}</div>
+      <div class="record-amount ${record.type}">${record.type === 'expense' ? '支付' : '收入'} ¥${formatMoney(record.amount)}</div>
       <div class="record-actions">
         <button onclick="event.stopPropagation();viewRecord('${record.id}')">详情</button>
         <button onclick="event.stopPropagation();editRecord('${record.id}')">编辑</button>

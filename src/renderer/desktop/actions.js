@@ -82,7 +82,8 @@ async function addRecord() {
       amount, category, note, date,
       bucket: currentType === 'income' ? 'life' : currentBucket,
       includeInBalance,
-      createdAt: Core.formatLocalDateTime()
+      createdAt: Core.formatLocalDateTime(),
+      hasTime: true
     });
   }
 
@@ -274,6 +275,8 @@ async function importCsv() {
   const result = await window.ledgerAPI.importCsv();
   if (result.success) {
     if (confirm(`导入 ${result.records.length} 条记录？（将追加到现有数据）`)) {
+      const maxSeq = appData.records.reduce((max, record) => Math.max(max, record.importSeq || 0), 0);
+      result.records.forEach((record, index) => { record.importSeq = maxSeq + index + 1; });
       appData.records.push(...result.records);
       await window.ledgerAPI.saveData(appData);
       renderDashboard();

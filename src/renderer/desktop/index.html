@@ -266,14 +266,15 @@
 2026-11-01,支出,餐饮,25.5,午餐,生活
 2026-11-05,支出,娱乐,199,买个新游戏,奖励</pre>
           <p><b>字段说明：</b></p>
-          <p>• <code>日期 / date</code>：日期，格式 YYYY-MM-DD（必填）</p>
+          <p>• <code>日期 / date</code>：日期，格式 YYYY-MM-DD（必填；也认 2026-11-08 15:20:33 这类带秒级时间的写法）</p>
           <p>• <code>类型 / type</code>：<code>支出 / expense</code>、<code>收入 / income</code>（必填）</p>
           <p>• <code>分类 / category</code>：分类名称，要和系统里的分类一致（必填）</p>
           <p>• <code>金额 / amount</code>：金额，数字（必填）</p>
           <p>• <code>备注 / note</code>：备注说明（可选）</p>
           <p>• <code>账户 / bucket / account / 归属</code>：<code>生活 / life</code>、<code>奖励 / reward</code>（可选，默认生活）</p>
           <p>• <code>include_in_balance</code>：是否计入可用余额，<code>true</code>/<code>false</code>（可选，默认 true）</p>
-          <p style="color:#86868b;margin-top:8px;">💡 表头中英文都认，两种导出格式（导出全部、按范围导出）也都能直接导回。导入是<b>追加</b>，不会覆盖已有记录。</p>
+          <p>• <code>时间 / created_at / time</code>：记录时间（可选）。精确到秒就原样保留；没给、只有日期或只到分，统一补成<b>该记账日当天 10:00</b></p>
+          <p style="color:#86868b;margin-top:8px;">💡 表头中英文都认，两种导出格式（导出全部、按范围导出）也都能直接导回。导入是<b>追加</b>，不会覆盖已有记录；内置导出不带时间列，导回来会按 10:00 处理。</p>
         </div>
       </details>
 

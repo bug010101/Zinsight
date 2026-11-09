@@ -159,6 +159,38 @@
     return text;
   }
 
+  /**
+   * 时间戳是否「精确到秒」：必须带 HH:mm:ss（中文冒号、ISO 的 .SSS / Z 也认）。
+   * 只有日期、只到分钟、空值都不算；这类记录导入时统一补成记账日当天 10:00。
+   */
+  function hasPreciseTime(raw) {
+    return /\d{1,2}[:：]\d{2}[:：]\d{2}/.test(String(raw == null ? '' : raw));
+  }
+
+  /**
+   * 从 CSV 里抽出可入库的秒级时间，返回统一的 YYYY-MM-DD HH:mm:ss；没精确到秒返回 ''。
+   * 支持三种写法：
+   *   1. 日期列自带时间戳：2026-11-08 15:20:33 / 2026-11-08T15:20:33
+   *   2. 独立时间列写完整日期时间：created_at=2026-11-08 15:20:33
+   *   3. 独立时间列只写钟点：created_at=15:20:33（日期取该行记账日期）
+   * 带时区的 ISO 串（...Z / +08:00）交给 normalizeTimestamp 转成同口径的本地时间。
+   */
+  function parsePreciseTime(rawDate, rawTime, fallbackDate) {
+    const timeText = String(rawTime == null ? '' : rawTime).trim();
+    const candidate = timeText || String(rawDate == null ? '' : rawDate).trim();
+    const clock = candidate.match(/(\d{1,2})[:：](\d{2})[:：](\d{2})/);
+    if (!clock) return '';
+    const hour = Number(clock[1]);
+    const minute = Number(clock[2]);
+    const second = Number(clock[3]);
+    if (hour > 23 || minute > 59 || second > 59) return '';
+    const hasDate = /^\d{4}[-/.年]\d{1,2}/.test(candidate);
+    if (hasDate && /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(candidate)) return normalizeTimestamp(candidate);
+    const day = hasDate ? normalizeDate(candidate) : fallbackDate;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return '';
+    return `${day} ${padTwoDigits(hour)}:${padTwoDigits(minute)}:${padTwoDigits(second)}`;
+  }
+
   /** 补齐老数据缺失的字段，避免渲染时炸掉 */
   function normalize(data) {
     const source = data && typeof data === 'object' ? data : {};
@@ -179,16 +211,31 @@
 
   function normalizeRecord(record) {
     const source = record || {};
+    const date = normalizeDate(source.date) || todayStr();
+    // 时间口径只有一条：精确到秒（HH:mm:ss）就原样保留；空值 / 只有日期 / 只到分
+    // 一律补成「记账日期当天上午 10:00」，并标记 hasTime=false，让排序按导入行序走。
+    // 不再按 id 是否含 _import_ 一刀切——导入文件里已经带秒级时间时要如实保留。
+    // 老数据没有 hasTime 字段：沿用旧口径，带 _import_ 的仍视为「补出来的时间」；
+    // 新数据一律带 hasTime 布尔标记，显式优先，避免二次 normalize 把补出来的
+    // 10:00:00 误判成真实秒级时间、把 CSV 导入行序打乱。
+    const imported = /_import_/.test(String(source.id || ''));
+    const declared = typeof source.hasTime === 'boolean' ? source.hasTime : !imported;
+    const precise = declared && hasPreciseTime(source.createdAt);
+    const createdAt = precise
+      ? normalizeTimestamp(source.createdAt)
+      : normalizeTimestamp(date + ' 10:00:00');
     return {
       id: source.id != null ? source.id : generateId(),
       type: source.type === 'income' ? 'income' : 'expense',
       amount: Number(source.amount) || 0,
       category: source.category || '其他',
       note: source.note || '',
-      date: normalizeDate(source.date) || todayStr(),
+      date,
       bucket: source.bucket === BUCKET_REWARD ? BUCKET_REWARD : BUCKET_LIFE,
       includeInBalance: source.includeInBalance !== false,
-      createdAt: normalizeTimestamp(source.createdAt)
+      createdAt,
+      hasTime: precise,
+      importSeq: source.importSeq != null ? source.importSeq : 0
     };
   }
 
@@ -372,9 +419,19 @@
       })
       .slice()
       .sort((firstRecord, secondRecord) => {
-        const timeA = firstRecord.createdAt || firstRecord.date || '';
-        const timeB = secondRecord.createdAt || secondRecord.date || '';
-        return String(timeB).localeCompare(String(timeA));
+        const aPrecise = !!firstRecord.hasTime;
+        const bPrecise = !!secondRecord.hasTime;
+        if (aPrecise && bPrecise) {
+          // 都有具体时间：最新在前
+          return String(secondRecord.createdAt).localeCompare(String(firstRecord.createdAt));
+        }
+        if (!aPrecise && !bPrecise) {
+          // 都没有秒级时间（只有日期的 CSV 导入等）：严格按导入时的 CSV 行序（上→下增序），
+          // 不再被「记账日期」重新洗牌，也不会因为补出来的 10:00 都落在同一天而乱序。
+          return (firstRecord.importSeq || 0) - (secondRecord.importSeq || 0);
+        }
+        // 混合情况：带秒级时间的记录（手填 / 带时间的导入）排在前
+        return aPrecise ? -1 : 1;
       });
   }
 
@@ -444,60 +501,102 @@
   }
 
   /**
-   * 生成账单 PDF 用的 HTML（内联样式，方便打印与系统打印插件复用）。
-   * 两端共用这一份，保证桌面 printToPDF 与安卓 @capacitor/print 出来的账单一致。
+   * 把记录汇总成「消费小票」结构化数据，桌面端（HTML 打印）与安卓端（Canvas 绘制
+   * 后转 PDF）共用，保证两端样式与口径一致。金额一律正数，用 支付 / 收入 区分。
+   */
+  function buildReceiptModel(records, options) {
+    const opts = options || {};
+    const list = (records || []).slice();
+    const items = list.map(record => ({
+      category: record.category || '其他',
+      note: record.note || '',
+      reward: isReward(record),
+      income: record.type === 'income',
+      amount: Number(record.amount) || 0
+    }));
+    const totalIncome = items.filter(item => item.income).reduce((sum, item) => sum + item.amount, 0);
+    const totalLife = items.filter(item => !item.income && !item.reward).reduce((sum, item) => sum + item.amount, 0);
+    const totalReward = items.filter(item => item.reward).reduce((sum, item) => sum + item.amount, 0);
+    return {
+      scope: opts.scope || '账单',
+      count: list.length,
+      items,
+      totalIncome,
+      totalLife,
+      totalReward,
+      generatedAt: formatLocalDateTime()
+    };
+  }
+
+  /**
+   * 生成「超市小票」样式的账单 HTML（内联样式，printToPDF 直接打印成 PDF）。
+   * 两端共用 buildReceiptModel，金额均为正数、用 支付 / 收入 区分。
    * records 已经由调用方筛选好（选中的 / 当前筛选结果）。
    */
   function buildBillHtml(records, options) {
-    const opts = options || {};
-    const list = (records || []).slice();
-    const totalIncome = list.filter(record => record.type === 'income').reduce((sum, record) => sum + (Number(record.amount) || 0), 0);
-    const totalLife = list.filter(record => record.type === 'expense' && !isReward(record)).reduce((sum, record) => sum + (Number(record.amount) || 0), 0);
-    const totalReward = list.filter(record => isReward(record)).reduce((sum, record) => sum + (Number(record.amount) || 0), 0);
-    const scope = opts.scope || '账单';
-
-    const rows = list.map(record => `
-      <tr>
-        <td>${htmlEscape(record.date)}</td>
-        <td>${record.type === 'income' ? '收入' : '支出'}</td>
-        <td>${htmlEscape(record.category)}</td>
-        <td class="num">${(record.type === 'income' ? '+' : '-') + formatMoney(record.amount)}</td>
-        <td>${htmlEscape(record.note || '')}</td>
-        <td>${htmlEscape(bucketLabel(record))}</td>
-      </tr>`).join('');
+    const model = buildReceiptModel(records, options);
+    const rows = model.items.map(item => {
+      const label = item.income ? '收入' : '支付';
+      const cls = item.income ? 'income' : 'pay';
+      const badge = item.reward ? '<span class="badge">奖励</span>' : '';
+      const note = item.note ? `<div class="note">${htmlEscape(item.note)}</div>` : '';
+      return `
+      <div class="row">
+        <div class="left">
+          <div class="cat">${htmlEscape(item.category)}${badge}</div>
+          ${note}
+        </div>
+        <div class="amt ${cls}">${label} ¥${formatMoney(item.amount)}</div>
+      </div>`;
+    }).join('');
 
     return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>Zinsight ${htmlEscape(scope)}</title>
+<title>Zinsight 消费小票</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #1d1d1f; margin: 32px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .meta { color: #86868b; font-size: 13px; margin-bottom: 20px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e6e6ea; vertical-align: top; }
-  th { background: #f5f5f7; font-weight: 600; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .summary { margin-top: 18px; font-size: 14px; }
-  .summary span { margin-right: 20px; white-space: nowrap; }
-  .footer { margin-top: 24px; color: #c7c7cc; font-size: 12px; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; color: #1a1a1a; background: #ececec; margin: 0; padding: 24px 0; display: flex; justify-content: center; }
+  .receipt { width: 320px; background: #fff; padding: 20px 18px 22px; box-shadow: 0 2px 12px rgba(0,0,0,0.15); font-size: 13px; line-height: 1.5; }
+  .shop { text-align: center; }
+  .shop h1 { font-size: 17px; margin: 0 0 3px; letter-spacing: 1px; }
+  .shop .sub { color: #8a8a8a; font-size: 11px; }
+  .dash { border: none; border-top: 1px dashed #c4c4c4; margin: 12px 0; }
+  .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 4px 0; }
+  .row .left { flex: 1; min-width: 0; }
+  .row .cat { font-weight: 600; }
+  .row .cat .badge { font-size: 10px; color: #b8860b; border: 1px solid #b8860b; border-radius: 4px; padding: 0 3px; margin-left: 5px; }
+  .row .note { color: #9a9a9a; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .amt { white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .row .amt.pay { color: #c0392b; }
+  .row .amt.income { color: #1e8449; }
+  .summary div { display: flex; justify-content: space-between; padding: 2px 0; }
+  .summary .income { color: #1e8449; font-weight: 600; }
+  .summary .pay { color: #c0392b; font-weight: 600; }
+  .summary .total { font-weight: 700; font-size: 14px; border-top: 1px dashed #c4c4c4; margin-top: 6px; padding-top: 8px; }
+  .footer { text-align: center; color: #b0b0b0; font-size: 10px; margin-top: 14px; line-height: 1.7; }
+  @media print { body { background: #fff; padding: 0; } .receipt { box-shadow: none; } }
 </style>
 </head>
 <body>
-  <h1>Zinsight ${htmlEscape(scope)}</h1>
-  <div class="meta">导出时间：${formatLocalDateTime()} ｜ 共 ${list.length} 笔记录</div>
-  <table>
-    <thead><tr><th>记账日期</th><th>类型</th><th>分类</th><th style="text-align:right;">金额</th><th>备注</th><th>归属</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#86868b;">没有记录</td></tr>'}</tbody>
-  </table>
-  <div class="summary">
-    <span>收入合计：¥${formatMoney(totalIncome)}</span>
-    <span>生活支出：¥${formatMoney(totalLife)}</span>
-    <span>奖励支出：¥${formatMoney(totalReward)}</span>
+  <div class="receipt">
+    <div class="shop">
+      <h1>Zinsight 消费小票</h1>
+      <div class="sub">${htmlEscape(model.scope)} · 共 ${model.count} 笔</div>
+      <div class="sub">${model.generatedAt}</div>
+    </div>
+    <hr class="dash">
+    ${rows || '<div style="text-align:center;color:#9a9a9a;">没有记录</div>'}
+    <hr class="dash">
+    <div class="summary">
+      <div><span>收入合计</span><span class="income">¥${formatMoney(model.totalIncome)}</span></div>
+      <div><span>生活支付</span><span class="pay">¥${formatMoney(model.totalLife)}</span></div>
+      <div><span>奖励支付</span><span class="pay">¥${formatMoney(model.totalReward)}</span></div>
+      <div class="total"><span>总笔数</span><span>${model.count} 笔</span></div>
+    </div>
+    <div class="footer">本小票由 Zinsight 生成<br>数据全部保存在本机 · 仅供个人记账参考</div>
   </div>
-  <div class="footer">数据全部保存在本机 · 由 Zinsight 生成</div>
 </body>
 </html>`;
   }
@@ -511,9 +610,11 @@
   }
 
   /**
-   * 解析 CSV 文本（与桌面端导入逻辑一致）
+   * 解析 CSV 文本（桌面端 / 安卓端共用）
    * 表头支持中英文：date/日期、type/类型、category/分类、amount/金额、note/备注、
-   * include_in_balance、bucket/account/账户（life/reward 或 生活/奖励）
+   * include_in_balance、bucket/account/账户（life/reward 或 生活/奖励）。
+   * 时间可选：日期列自带 HH:mm:ss，或独立的时间列 created_at / time / 时间。
+   * 只有精确到秒才保留原时间，否则由 normalizeRecord 补成记账日 10:00。
    */
   function parseCsv(text) {
     const content = String(text || '').replace(/^\uFEFF/, '');
@@ -526,7 +627,9 @@
     const colIdx = {};
     headers.forEach((header, index) => {
       if (header.includes('bucket') || header.includes('account') || header === '账户' || header === '归属') colIdx.bucket = index;
-      else if (header.includes('date') || header === '日期') colIdx.date = index;
+      else if (header.includes('date') || header.includes('日期')) colIdx.date = index;
+      // 时间列放在 date 之后判定：datetime / 日期时间 先归到日期列，其单元格里的时间戳照样能读
+      else if (header.includes('created') || header.includes('timestamp') || header.includes('time') || header.includes('时间')) colIdx.time = index;
       else if (header.includes('type') || header === '类型') colIdx.type = index;
       else if (header.includes('category') || header === '分类') colIdx.category = index;
       else if (header.includes('amount') || header === '金额') colIdx.amount = index;
@@ -551,38 +654,39 @@
       parts.push(current);
 
       const get = (idx, def) => (idx !== undefined && parts[idx] !== undefined ? parts[idx].trim() : (def || ''));
+      const rawDate = get(colIdx.date);
       const typeRaw = get(colIdx.type);
       const includeRaw = get(colIdx.include, 'true').toLowerCase();
       const accountRaw = get(colIdx.bucket).toLowerCase();
       const amount = parseFloat(get(colIdx.amount));
 
-      if (!get(colIdx.date) || !isFinite(amount)) continue;
+      if (!rawDate || !isFinite(amount)) continue;
 
-      records.push({
+      const recordDate = normalizeDate(rawDate);
+      const preciseTime = parsePreciseTime(rawDate, get(colIdx.time), recordDate);
+
+      // 归一在内核里一次做完：带秒级时间的保留原值，其余补成当天 10:00，
+      // 导入当次（还没重启 normalize）显示与排序就已经是正确的。
+      records.push(normalizeRecord({
         id: generateId('rec') + '_import_' + index,
-        date: normalizeDate(get(colIdx.date)),
+        date: recordDate,
         type: typeRaw === '收入' || typeRaw === 'income' ? 'income' : 'expense',
         category: get(colIdx.category),
         amount,
         note: get(colIdx.note),
         bucket: accountRaw === 'reward' || accountRaw === '奖励' ? BUCKET_REWARD : BUCKET_LIFE,
         includeInBalance: includeRaw !== 'false' && includeRaw !== '0',
-        createdAt: ''
-      });
+        createdAt: preciseTime,
+        hasTime: !!preciseTime,
+        importSeq: index
+      }));
     }
 
     if (!records.length) return { success: false, error: '没有解析到有效记录' };
 
-    // 导入顺序修复：createdAt 与「记账日期」解耦，改为按 CSV 行序递增的本地完整时间戳
-    // （精确到秒）。这样列表按 createdAt 倒序时，导入的记录自然以 CSV 里的先后排列，
-    // 不会再被「记账日期」重新洗牌（之前锚定在记账日期 + 秒偏移，不同日期的记录
-    // 会被日期重新排序，导致导入顺序丢失）。当前录入的记录也用同样的本地时间戳，两端一致。
-    const importBase = new Date();
-    records.forEach((record, rowIndex) => {
-      importBase.setSeconds(importBase.getSeconds() + 1);
-      record.createdAt = formatLocalDateTime(importBase);
-    });
-
+    // 导入行序由 importSeq（CSV 行序，1 基）保留；时间口径统一由 normalizeRecord 把关：
+    // 精确到秒的保留原值，其余补成记账日 10:00。真实排序在 sortRecords 里
+    // 按 hasTime / importSeq 分支完成。
     return { success: true, records };
   }
 
@@ -635,7 +739,7 @@
     BUCKET_LIFE, BUCKET_REWARD, BUCKET_LABEL,
     // 日期
     todayStr, monthKey, monthStartStr, daysInMonth, lastMonths, normalizeDate, formatLocalDateTime,
-    normalizeTimestamp, formatFullDateTime,
+    normalizeTimestamp, formatFullDateTime, hasPreciseTime, parsePreciseTime,
     // 基础
     padTwoDigits, formatMoney, generateId, categoryIcon, defaultData, defaultConfig, normalize,
     isReward, bucketOf, bucketLabel,
@@ -645,7 +749,7 @@
     // 流水
     sortRecords, formatRecordTime,
     // CSV
-    buildFullCsv, buildRangeCsv, buildRangeJson, buildBillHtml, filterByRange, parseCsv,
+    buildFullCsv, buildRangeCsv, buildRangeJson, buildBillHtml, buildReceiptModel, filterByRange, parseCsv,
     // AI 配置
     normalizeAiEndpoint, formatAiError
   };

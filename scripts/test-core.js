@@ -76,10 +76,11 @@ test('monthSums 只统计支出', () => {
 });
 
 test('sortRecords 搜索与倒序', () => {
-  const all = Core.sortRecords(sample, '');
+  // 应用内记录经 normalize 后带 hasTime，按 createdAt 倒序（最新在前）
+  const all = Core.sortRecords(Core.normalize({ records: sample }).records, '');
   assert.strictEqual(all[0].id, 'd');
-  assert.strictEqual(Core.sortRecords(sample, '午餐').length, 1);
-  assert.strictEqual(Core.sortRecords(sample, '餐').length, 1);
+  assert.strictEqual(Core.sortRecords(Core.normalize({ records: sample }).records, '午餐').length, 1);
+  assert.strictEqual(Core.sortRecords(Core.normalize({ records: sample }).records, '餐').length, 1);
 });
 
 test('buildFullCsv 能被 parseCsv 读回来', () => {
@@ -286,7 +287,7 @@ test('formatFullDateTime 返回完整秒级时间，详情里展示', () => {
   assert.strictEqual(Core.formatFullDateTime({}), Core.formatLocalDateTime());
 });
 
-test('parseCsv 导入顺序：列表按 createdAt 倒序即 CSV 行序（不被记账日期洗牌）', () => {
+test('parseCsv 导入顺序：按 CSV 行序（上→下增序），不被记账日期洗牌', () => {
   // 三行日期故意乱序：01-05 / 03-01 / 02-15，若按 date 排序会变成 a/b/c
   const csv = [
     '日期,类型,分类,金额,备注',
@@ -296,21 +297,199 @@ test('parseCsv 导入顺序：列表按 createdAt 倒序即 CSV 行序（不被�
   ].join('\n');
   const parsed = Core.parseCsv(csv);
   assert.strictEqual(parsed.success, true);
-  // createdAt 按行递增（与记账日期解耦），倒序后应为 c -> b -> a（即 CSV 录入顺序）
+  // 没有具体秒数的 CSV 导入严格按行序（第一行在最前），保留用户录入顺序
   const sorted = Core.sortRecords(parsed.records, '');
-  assert.deepStrictEqual(sorted.map(record => record.note), ['c', 'b', 'a']);
+  assert.deepStrictEqual(sorted.map(record => record.note), ['a', 'b', 'c']);
+  // importSeq 应是 CSV 行序（1 基）
+  assert.deepStrictEqual(parsed.records.map(record => record.importSeq), [1, 2, 3]);
+});
+
+test('normalizeRecord 对 CSV 导入记录：时间固定为记账日 10:00，hasTime=false', () => {
+  const record = Core.normalize({
+    records: [{ id: 'x_import_1', type: 'expense', amount: 10, category: '餐饮', date: '2026-11-01', createdAt: '' }]
+  }).records[0];
+  assert.strictEqual(record.createdAt, '2026-11-01 10:00:00');
+  assert.strictEqual(record.hasTime, false);
+  assert.strictEqual(record.importSeq, 0);
+});
+
+test('normalizeRecord 对手填记录（带真实时间戳）：保留时间，hasTime=true', () => {
+  const record = Core.normalize({
+    records: [{ id: 'y', type: 'expense', amount: 10, category: '餐饮', date: '2026-11-01', createdAt: '2026-11-01 21:30:00' }]
+  }).records[0];
+  assert.strictEqual(record.createdAt, '2026-11-01 21:30:00');
+  assert.strictEqual(record.hasTime, true);
+});
+
+test('sortRecords 对归一后的导入记录：严格按 importSeq 增序（CSV 行序）', () => {
+  const csv = [
+    '日期,类型,分类,金额,备注',
+    '2026-01-05,支出,餐饮,10,a',
+    '2026-03-01,支出,餐饮,20,b',
+    '2026-02-15,支出,餐饮,30,c'
+  ].join('\n');
+  const normalized = Core.normalize({ records: Core.parseCsv(csv).records }).records;
+  const sorted = Core.sortRecords(normalized, '');
+  assert.deepStrictEqual(sorted.map(record => record.note), ['a', 'b', 'c']);
+  // 归一后时间应为记账日 10:00，hasTime=false（不再回退成导入时刻 / 当前时间）
+  assert.strictEqual(sorted[0].createdAt, '2026-01-05 10:00:00');
+  assert.strictEqual(sorted[0].hasTime, false);
+});
+
+test('sortRecords 混合：带具体时间的手填记录排在前，导入记录（按行序）在后', () => {
+  const importedNorm = Core.normalize({ records: Core.parseCsv([
+    '日期,类型,分类,金额,备注',
+    '2026-02-01,支出,餐饮,10,a',
+    '2026-02-03,支出,餐饮,20,b'
+  ].join('\n')).records }).records;
+  const handEntered = Core.normalize({ records: [
+    { id: 'h1', type: 'expense', amount: 5, category: '交通', date: '2026-02-02', createdAt: '2026-02-02 09:00:00' },
+    { id: 'h2', type: 'expense', amount: 8, category: '交通', date: '2026-02-04', createdAt: '2026-02-04 09:00:00' }
+  ] }).records;
+  const sorted = Core.sortRecords(importedNorm.concat(handEntered), '');
+  // 手填（hasTime=true）按时间倒序在前，导入（hasTime=false）按行序在后
+  assert.deepStrictEqual(sorted.map(record => record.note), ['', '', 'a', 'b']);
+  // 手填内部按时间倒序：02-04(h2) 在 02-02(h1) 前
+  assert.strictEqual(sorted[0].id, 'h2');
+  assert.strictEqual(sorted[1].id, 'h1');
+});
+
+// ========== 导入时间口径：只有没精确到秒才补 10:00 ==========
+
+test('hasPreciseTime 只认精确到秒的时间', () => {
+  assert.strictEqual(Core.hasPreciseTime('2026-11-08 15:20:33'), true);
+  assert.strictEqual(Core.hasPreciseTime('2026-11-08T15:20:33.000Z'), true);
+  assert.strictEqual(Core.hasPreciseTime('15:20:33'), true);
+  assert.strictEqual(Core.hasPreciseTime('2026-11-08 15:20'), false);
+  assert.strictEqual(Core.hasPreciseTime('2026-11-08'), false);
+  assert.strictEqual(Core.hasPreciseTime(''), false);
+});
+
+test('parsePreciseTime 拒绝无秒级时间与非法钟点', () => {
+  assert.strictEqual(Core.parsePreciseTime('2026-11-08', '', '2026-11-08'), '');
+  assert.strictEqual(Core.parsePreciseTime('2026-11-08', '15:20', '2026-11-08'), '');
+  assert.strictEqual(Core.parsePreciseTime('2026-11-08', '25:00:00', '2026-11-08'), '');
+  assert.strictEqual(Core.parsePreciseTime('2026-11-08', '15:20:33', '2026-11-08'), '2026-11-08 15:20:33');
+});
+
+test('normalizeRecord：导入记录带秒级时间则原样保留，不再一刀切补 10:00', () => {
+  const record = Core.normalize({ records: [{
+    id: 'x_import_1', type: 'expense', amount: 10, category: '餐饮',
+    date: '2026-11-01', createdAt: '2026-11-01 21:07:09', hasTime: true
+  }] }).records[0];
+  assert.strictEqual(record.createdAt, '2026-11-01 21:07:09');
+  assert.strictEqual(record.hasTime, true);
+  assert.strictEqual(Core.formatFullDateTime(record), '2026-11-01 21:07:09');
+});
+
+test('normalizeRecord：空时间 / 只到分 / 只有日期才补记账日 10:00', () => {
+  const rows = [
+    { id: 'x_import_1', date: '2026-11-01', createdAt: '', hasTime: false },
+    { id: 'x_import_2', date: '2026-11-02', createdAt: '2026-11-02 21:07', hasTime: true },
+    { id: 'x_import_3', date: '2026-11-03' }
+  ];
+  const normalized = Core.normalize({ records: rows }).records;
+  assert.deepStrictEqual(normalized.map(item => item.createdAt), [
+    '2026-11-01 10:00:00', '2026-11-02 10:00:00', '2026-11-03 10:00:00'
+  ]);
+  assert.deepStrictEqual(normalized.map(item => item.hasTime), [false, false, false]);
+});
+
+test('normalizeRecord：历史导入记录二次归一不会被补出来的 10:00 翻转', () => {
+  const before = { id: 'x_import_1', date: '2026-11-01', createdAt: '2026-11-01 10:00:00', hasTime: false, importSeq: 1 };
+  const after = Core.normalize({ records: [before] }).records[0];
+  assert.strictEqual(after.createdAt, '2026-11-01 10:00:00');
+  assert.strictEqual(after.hasTime, false);
+  assert.strictEqual(after.importSeq, 1);
+});
+
+test('parseCsv：普通 CSV 只有日期，统一补成记账日 10:00', () => {
+  const parsed = Core.parseCsv('date,type,category,amount,note\n2026-11-08,支出,餐饮,10,晚饭\n');
+  assert.strictEqual(parsed.records[0].createdAt, '2026-11-08 10:00:00');
+  assert.strictEqual(parsed.records[0].hasTime, false);
+});
+
+test('parseCsv：日期列自带秒级时间戳时保留时间，记账日期仍只到日', () => {
+  const parsed = Core.parseCsv('date,type,category,amount,note\n2026-11-08 15:20:33,支出,餐饮,10,晚饭\n2026/11/9T09:05:06,支出,交通,20,地铁\n');
+  assert.strictEqual(parsed.success, true);
+  assert.deepStrictEqual(parsed.records.map(item => item.date), ['2026-11-08', '2026-11-09']);
+  assert.deepStrictEqual(parsed.records.map(item => item.createdAt), ['2026-11-08 15:20:33', '2026-11-09 09:05:06']);
+  assert.deepStrictEqual(parsed.records.map(item => item.hasTime), [true, true]);
+});
+
+test('parseCsv：独立时间列支持完整时间 / 只有钟点 / ISO 时区 / 只到分回退', () => {
+  const parsed = Core.parseCsv([
+    'date,type,category,amount,created_at',
+    '2026-11-08,支出,餐饮,10,2026-11-08 15:20:33',
+    '2026-11-09,支出,交通,20,09:05:06',
+    '2026-11-10,支出,购物,30,09:05',
+    '2026-11-11,支出,娱乐,40,2026-11-11T07:20:33.000Z'
+  ].join('\n'));
+  assert.strictEqual(parsed.success, true);
+  assert.deepStrictEqual(parsed.records.map(item => item.createdAt), [
+    '2026-11-08 15:20:33',
+    '2026-11-09 09:05:06',
+    '2026-11-10 10:00:00',
+    Core.normalizeTimestamp('2026-11-11T07:20:33.000Z')
+  ]);
+  assert.deepStrictEqual(parsed.records.map(item => item.hasTime), [true, true, false, true]);
+});
+
+test('parseCsv：中文「时间」列同样生效，缺时间的行补 10:00', () => {
+  const parsed = Core.parseCsv('日期,类型,分类,金额,时间\n2026/11/8,支出,餐饮,12,15:20:33\n2026/11/9,支出,交通,8,\n');
+  assert.strictEqual(parsed.success, true);
+  assert.deepStrictEqual(parsed.records.map(item => item.createdAt), [
+    '2026-11-08 15:20:33', '2026-11-09 10:00:00'
+  ]);
+  assert.deepStrictEqual(parsed.records.map(item => item.hasTime), [true, false]);
+});
+
+test('sortRecords：带秒级时间的导入记录按时间倒序在前，无时间的按行序在后', () => {
+  const parsed = Core.parseCsv([
+    'date,type,category,amount,created_at,note',
+    '2026-11-01,支出,餐饮,10,,无时间A',
+    '2026-11-02,支出,交通,20,2026-11-02 09:00:00,早',
+    '2026-11-03,支出,购物,30,2026-11-03 21:00:00,晚',
+    '2026-11-04,支出,娱乐,40,,无时间B'
+  ].join('\n'));
+  const sorted = Core.sortRecords(parsed.records, '');
+  assert.deepStrictEqual(sorted.map(item => item.note), ['晚', '早', '无时间A', '无时间B']);
+});
+
+test('buildReceiptModel 金额正数 + 支付/收入 区分 + 三类合计', () => {
+  const model = Core.buildReceiptModel(sample, { scope: 'M' });
+  assert.strictEqual(model.count, 4);
+  assert.strictEqual(model.totalIncome, 700);
+  assert.strictEqual(model.totalLife, 125.5);
+  assert.strictEqual(model.totalReward, 0);
+  // 每条金额都是正数，用 income/reward 标记区分方向，绝无负数
+  model.items.forEach(item => assert.ok(item.amount >= 0));
+  const meal = model.items.find(item => item.category === '餐饮');
+  assert.strictEqual(meal.income, false);
+  assert.strictEqual(meal.reward, false);
+});
+
+test('buildReceiptModel 拆分生活/奖励支付', () => {
+  const model = Core.buildReceiptModel(mixed, { scope: 'M' });
+  assert.strictEqual(model.totalLife, 125.5);
+  assert.strictEqual(model.totalReward, 100);
+  assert.strictEqual(model.items.find(item => item.category === '娱乐').reward, true);
 });
 
 // ========== PDF 账单 HTML ==========
 
-test('buildBillHtml 生成含标题与合计的账单 HTML', () => {
+test('buildBillHtml 生成超市小票样式的账单 HTML（正数 + 支付/收入）', () => {
   const html = Core.buildBillHtml(sample, { scope: '测试账单' });
   assert.ok(html.includes('测试账单'));
-  assert.ok(html.includes('<table>'));
-  assert.ok(html.includes('记账日期'));
+  assert.ok(html.includes('Zinsight 消费小票'));
   assert.ok(html.includes('收入合计'));
-  assert.ok(html.includes('生活支出'));
-  assert.ok(html.includes('奖励支出'));
+  assert.ok(html.includes('生活支付'));
+  assert.ok(html.includes('奖励支付'));
+  assert.ok(html.includes('总笔数'));
+  // 金额一律正数，用 支付 / 收入 区分，绝不出现负号金额
+  assert.ok(html.includes('支付 ¥'));
+  assert.ok(html.includes('收入 ¥'));
+  assert.ok(!html.includes('¥-'));
   // 没有任何记录时也能生成（不报错、显示空态）
   const empty = Core.buildBillHtml([], { scope: '空' });
   assert.ok(empty.includes('没有记录'));

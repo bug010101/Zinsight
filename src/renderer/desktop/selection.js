@@ -13,7 +13,7 @@ function viewRecord(id) {
     ['记账日期', currentRecord.date],
     ['类型', currentRecord.type === 'income' ? '收入' : '支出'],
     ['分类', currentRecord.category],
-    ['金额', (currentRecord.type === 'income' ? '+' : '-') + '¥' + formatMoney(currentRecord.amount)],
+    ['金额', (currentRecord.type === 'income' ? '收入' : '支付') + ' ¥' + formatMoney(currentRecord.amount)],
     ['备注', currentRecord.note || '—'],
     ['归属', Core.bucketLabel(currentRecord)],
     ['完整记录时间', Core.formatFullDateTime(currentRecord)],

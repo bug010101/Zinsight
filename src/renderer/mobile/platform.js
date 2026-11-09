@@ -138,6 +138,57 @@ export async function saveAndShare(filename, content, mime) {
   return { success: true, shared, path: filename };
 }
 
+/** 把 base64 字节（例如 jspdf 生成的 PDF）交给系统分享；原生走缓存目录 + 系统分享面板 */
+export async function saveAndShareBytes(base64, filename, mimeType) {
+  if (!NATIVE) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+    const blob = new Blob([bytes], { type: mimeType || 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    return { success: true, shared: true, path: filename };
+  }
+
+  const exportDir = 'exports';
+  try {
+    await Filesystem.mkdir({ path: exportDir, directory: Directory.Cache, recursive: true });
+  } catch (error) { /* 目录已存在 */ }
+  let result;
+  try {
+    result = await Filesystem.writeFile({
+      path: `${exportDir}/${filename}`,
+      data: base64,
+      directory: Directory.Cache,
+      encoding: Encoding.Base64,
+      recursive: true
+    });
+  } catch (error) {
+    result = await Filesystem.writeFile({
+      path: filename,
+      data: base64,
+      directory: Directory.Cache,
+      encoding: Encoding.Base64,
+      recursive: true
+    });
+  }
+  let shared = true;
+  try {
+    await Share.share({ title: filename, files: [result.uri], dialogTitle: '分享 ' + filename });
+  } catch (error) {
+    const message = (error && error.message) || '';
+    if (/cancel/i.test(message)) shared = false;
+    else throw error;
+  }
+  return { success: true, shared, path: filename };
+}
+
 /* ============================ AI ============================ */
 
 export async function aiChat(message, contextData, history) {

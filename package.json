@@ -1,7 +1,7 @@
 {
   "name": "Zinsight",
   "productName": "Zinsight",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "轻量级个人记账应用（桌面端 Electron + 安卓端 Capacitor）",
   "license": "MIT",
   "author": {
@@ -87,7 +87,8 @@
     "@capacitor/android": "^8.6.0",
     "@capacitor/core": "^8.6.0",
     "@capacitor/filesystem": "^8.1.5",
-    "@capacitor/share": "^8.0.3"
+    "@capacitor/share": "^8.0.3",
+    "jspdf": "^4.2.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.0",
