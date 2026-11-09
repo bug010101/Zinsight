@@ -2,7 +2,7 @@
 
 轻量级个人记账应用。一套逻辑、两种外壳：**桌面端（Electron）** + **安卓端（Capacitor）**。专注于「本月还能花多少钱」，支持预算管理、奖励额度、收支统计、AI 分析，数据完全本地存储。
 
-> **当前版本 v1.4.2**：AI 回复支持 Markdown 排版、AI 分析按提问意图隔离生活 / 奖励两套账、渲染层与共享能力按职责拆分为小模块、文档与打包版本统一。
+> **当前版本 v1.4.3**：AI 回复支持 Markdown 排版、AI 分析按提问意图隔离生活 / 奖励两套账、渲染层与共享能力按职责拆分为小模块、文档与打包版本统一。
 > 默认完全离线：不内置任何云服务、第三方接口或数据上报；AI 分析是可选功能，只有你主动配置 API 才会联网。
 
 ---
@@ -88,9 +88,9 @@
 
 ## 版本与更新
 
-版本号只维护一处：`package.json` 的 `version`。桌面端安装包由 electron-builder 读取它；安卓端的 `versionName` / `versionCode` 由 `scripts/android-version.js` 同步（`1.4.2` → `versionCode 10402`，规则 `major×10000 + minor×100 + patch`）。打 tag 触发 CI 时，会先校验 tag 与 `package.json` 版本一致，避免 Release 名和包内版本对不上。
+版本号只维护一处：`package.json` 的 `version`。桌面端安装包由 electron-builder 读取它；安卓端的 `versionName` / `versionCode` 由 `scripts/android-version.js` 同步（`1.4.3` → `versionCode 10403`，规则 `major×10000 + minor×100 + patch`）。打 tag 触发 CI 时，会先校验 tag 与 `package.json` 版本一致，避免 Release 名和包内版本对不上。
 
-### v1.4.2（渲染 / 口径修复 + 架构整理）
+### v1.4.3（渲染 / 口径修复 + 架构整理）
 
 | 类型 | 内容 |
 |---|---|
@@ -100,7 +100,7 @@
 | 新增 | 共享 `markdown.js`（零依赖）：标题、强调、列表、引用、表格、代码、分割线；共享 `markdown.css` 一套样式两端复用 |
 | 安全 | 先 HTML 转义再生成标签，AI 返回的 `<script>` / `<img onerror>` 不会执行；不生成可点击外链、不加载远程图片，保持零外发；用户消息与错误提示也改为纯文本转义 |
 | 改进 | 桌面端 866 行、安卓端 1153 行的单文件按职责拆成 7 / 15 个 JS 模块；CSS 也按分节拆成 2 / 6 个文件，全部 < 300 行。桌面端用顺序加载的经典脚本，安卓端用 ES 模块 + 单一 `state`，`build:www` 仍只产出一个 `www/app.js` |
-| 调整 | 版本号统一为 `1.4.2`，CI 的 `versionName` 校验改为动态读取，tag 示例同步 |
+| 调整 | 版本号统一为 `1.4.3`，CI 的 `versionName` 校验改为动态读取，tag 示例同步 |
 | 修复 | 桌面端 CSV 导出 / 导入 / 按范围导出统一改走共享内核，备注含英文双引号不再在往返时丢字符；补上 Excel 另存产生的斜杠日期归一化 |
 | 规范 | 全量消灭 `$` / `$$` 符号选择器与单字母变量，改用语义化命名；新增零依赖 `npm run lint`，把命名、`var`、文件规模、跨模块调用契约检查接入 `test:core` 与 CI |
 
@@ -469,8 +469,8 @@ npm run build:win
 打 tag 后会自动触发 GitHub Actions 打包并上传到 Release：
 
 ```bash
-git tag v1.4.2
-git push origin v1.4.2
+git tag v1.4.3
+git push origin v1.4.3
 ```
 
 > tag 必须和 `package.json` 里的版本号一致，CI 会校验，不一致直接失败——这样 Release 名、安装包内版本、APK 的 `versionName` 三者一定对得上。
@@ -489,7 +489,7 @@ APK 由 `.github/workflows/android-apk.yml` 在 GitHub 的机器上编译，**�
 
 | 方式 | 操作 | 结果 |
 |---|---|---|
-| 打 tag | `git tag v1.4.2 && git push origin v1.4.2` | 出 APK 并自动挂到 Release |
+| 打 tag | `git tag v1.4.3 && git push origin v1.4.3` | 出 APK 并自动挂到 Release |
 | 手动 | Actions → Android APK → Run workflow | 出 APK 存在 Artifact，保留 30 天 |
 
 完整流程：`npm run test:core`（逻辑自测）→ `build:www`（打包页面）→ `cap add android`（生成原生工程）→ `android-version.js`（写版本）→ 替换图标 → `cap sync android` → `gradlew assembleDebug`（出 APK）。

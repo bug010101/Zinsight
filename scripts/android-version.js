@@ -15,7 +15,7 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const GRADLE_FILE = path.join(ROOT, 'android', 'app', 'build.gradle');
 
-// 1.4.2 -> 10402；保证随版本号单调递增，且远小于 int 上限
+// 1.4.3 -> 10403；保证随版本号单调递增，且远小于 int 上限
 function toVersionCode(version) {
   const parts = String(version).split('-')[0].split('.').map(n => parseInt(n, 10) || 0);
   const [major = 0, minor = 0, patch = 0] = parts;
