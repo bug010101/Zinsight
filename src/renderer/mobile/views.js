@@ -137,6 +137,23 @@ export function renderRecentList() {
 export function recordItemHtml(record) {
   const sign = record.type === 'expense' ? '-' : '+';
   const isReward = Core.isReward(record);
+  const selectable = state.selectionMode && state.currentView === 'records';
+  const checked = selectable && state.selectedIds.indexOf(record.id) >= 0;
+  if (selectable) {
+    return `
+    <div class="record-item selectable ${checked ? 'selected' : ''}" data-id="${escapeHtml(record.id)}">
+      <span class="record-check${checked ? ' on' : ''}"></span>
+      <div class="record-icon${isReward ? ' reward' : ''}">${Core.categoryIcon(record.category)}</div>
+      <div class="record-info">
+        <div class="record-cat">${escapeHtml(record.category)}${isReward ? '<span class="record-badge">奖励</span>' : ''}</div>
+        <div class="record-note">${escapeHtml(record.note || '—')}</div>
+      </div>
+      <div class="record-right">
+        <div class="record-amount ${record.type}${isReward ? ' reward' : ''}">${sign}¥${Core.formatMoney(record.amount)}</div>
+        <div class="record-date">${escapeHtml(Core.formatRecordTime(record))}</div>
+      </div>
+    </div>`;
+  }
   return `
     <div class="record-item" data-id="${escapeHtml(record.id)}">
       <div class="record-icon${isReward ? ' reward' : ''}">${Core.categoryIcon(record.category)}</div>
@@ -149,6 +166,47 @@ export function recordItemHtml(record) {
         <div class="record-date">${escapeHtml(Core.formatRecordTime(record))}</div>
       </div>
     </div>`;
+}
+
+/* ============================ 流水多选 ============================ */
+
+export function toggleSelectionMode() {
+  state.selectionMode = !state.selectionMode;
+  if (!state.selectionMode) state.selectedIds = [];
+  updateSelectionBar();
+  paintRecords();
+}
+
+export function toggleRecordSelection(id) {
+  const index = state.selectedIds.indexOf(id);
+  if (index >= 0) state.selectedIds.splice(index, 1);
+  else state.selectedIds.push(id);
+  updateSelectionBar();
+  paintRecords();
+}
+
+export function selectAllInView() {
+  const idSet = new Set(state.selectedIds.map(String));
+  state.filteredRecords.forEach(record => idSet.add(String(record.id)));
+  state.selectedIds = Array.from(idSet);
+  updateSelectionBar();
+  paintRecords();
+}
+
+export function clearSelection() {
+  state.selectedIds = [];
+  updateSelectionBar();
+  paintRecords();
+}
+
+export function updateSelectionBar() {
+  const bar = queryElement('#selectionBar');
+  const count = queryElement('#selectionCount');
+  const toggleButton = queryElement('#btnSelectMode');
+  if (!bar) return;
+  bar.style.display = state.selectionMode ? 'flex' : 'none';
+  if (count) count.textContent = '已选 ' + state.selectedIds.length + ' 条';
+  if (toggleButton) toggleButton.textContent = state.selectionMode ? '退出多选' : '多选';
 }
 
 export function renderRecords() {

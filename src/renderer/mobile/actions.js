@@ -111,7 +111,7 @@ export async function saveSheet() {
       date: date,
       bucket: bucket,
       includeInBalance: includeInBalance,
-      createdAt: new Date().toISOString()
+      createdAt: Core.formatLocalDateTime()
     });
     showToast(bucket === 'reward' ? '已记一笔奖励消费' : '已记一笔');
   }
@@ -137,4 +137,43 @@ export async function deleteCurrent() {
   refreshAll();
   updateAppbar();
   showToast('已删除');
+}
+
+/* ============================ 记录详情 ============================ */
+
+export function openDetail(record) {
+  state.detailId = record ? record.id : null;
+  const rows = [
+    ['记账日期', record.date],
+    ['类型', record.type === 'income' ? '收入' : '支出'],
+    ['分类', record.category],
+    ['金额', (record.type === 'income' ? '+' : '-') + '¥' + Core.formatMoney(record.amount)],
+    ['备注', record.note || '—'],
+    ['归属', Core.bucketLabel(record)],
+    ['完整记录时间', Core.formatFullDateTime(record)],
+    ['记录 ID', record.id]
+  ];
+  const container = queryElement('#detailRows');
+  container.innerHTML = '';
+  rows.forEach(function (entry) {
+    const rowElement = document.createElement('div');
+    rowElement.className = 'detail-row';
+    const labelElement = document.createElement('span');
+    labelElement.className = 'detail-label';
+    labelElement.textContent = entry[0];
+    const valueElement = document.createElement('span');
+    valueElement.className = 'detail-value';
+    valueElement.textContent = String(entry[1]);
+    rowElement.appendChild(labelElement);
+    rowElement.appendChild(valueElement);
+    container.appendChild(rowElement);
+  });
+  queryElement('#detailMask').classList.add('show');
+  queryElement('#detailDialog').classList.add('show');
+}
+
+export function closeDetail() {
+  queryElement('#detailMask').classList.remove('show');
+  queryElement('#detailDialog').classList.remove('show');
+  state.detailId = null;
 }

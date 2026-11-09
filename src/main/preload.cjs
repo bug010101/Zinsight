@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('ledgerAPI', {
   saveConfig: (config) => ipcRenderer.invoke('config:save', config),
   // 导入导出
   exportCsv: (records) => ipcRenderer.invoke('data:exportCsv', records),
+  exportPdf: (payload) => ipcRenderer.invoke('data:exportPdf', payload),
   exportByRange: (startDate, endDate, format) => ipcRenderer.invoke('data:exportByRange', { startDate, endDate, format }),
   deleteByRange: (startDate, endDate) => ipcRenderer.invoke('data:deleteByRange', { startDate, endDate }),
   deleteAll: () => ipcRenderer.invoke('data:deleteAll'),

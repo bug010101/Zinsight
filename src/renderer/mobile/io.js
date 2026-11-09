@@ -56,6 +56,43 @@ export async function exportByRange(format) {
   }
 }
 
+/**
+ * 导出账单（HTML 形式，离线、零依赖）。
+ * 安卓没有可用的 @capacitor/print（官方包未发布到当前 registry，社区版仅支持旧版
+ * Capacitor，且纯 JS 的 PDF 库无法正确渲染中文需内嵌数 MB 字体），所以账单复用与
+ * CSV 导出同源的「写缓存 + 系统分享」通道，生成一个自包含的 HTML 文件（内联样式、
+ * 中文用系统字体正常显示），在微信 / QQ / 文件管理里都能打开，浏览器里也能直接打印成 PDF。
+ * 桌面端则用 Chromium 原生 printToPDF 生成真正的 .pdf。
+ *
+ * @param {boolean} useSelection 是否仅导出多选勾选的记录；为 false 时导出全部记录。
+ */
+export async function exportBill(useSelection) {
+  try {
+    let records;
+    let scope;
+    if (useSelection && state.selectedIds.length) {
+      const idSet = new Set(state.selectedIds.map(String));
+      records = state.filteredRecords.filter(record => idSet.has(String(record.id)));
+      scope = '选中记录';
+    } else if (useSelection) {
+      const bucket = state.recordFilter === 'all' ? null : state.recordFilter;
+      records = Core.sortRecords(state.appData.records, queryElement('#searchInput').value, bucket);
+      scope = '当前筛选';
+    } else {
+      records = state.appData.records.slice();
+      scope = '全部记录';
+    }
+    if (!records.length) { showToast('没有可导出的记录'); return; }
+
+    const html = Core.buildBillHtml(records, { scope });
+    const name = `账单_${Core.todayStr()}.html`;
+    const result = await saveAndShare(name, html, 'text/html');
+    reportExportResult(name, records.length, result);
+  } catch (caughtError) {
+    showToast('导出失败：' + ((caughtError && caughtError.message) || '未知错误'));
+  }
+}
+
 export async function importCsvText(text) {
   const parsed = Core.parseCsv(text);
   if (!parsed.success) { showToast(parsed.error || '解析失败'); return; }

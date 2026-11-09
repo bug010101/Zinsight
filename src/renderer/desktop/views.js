@@ -147,6 +147,9 @@ function setRecordFilter(filter) {
   document.querySelectorAll('.filter-chip').forEach(button => {
     button.classList.toggle('active', button.dataset.filter === filter);
   });
+  // 切换筛选时清空已选（多选态下的勾选只针对当前视图有意义）
+  selectedRecordIds = [];
+  if (selectionMode) updateSelectionUi();
   renderRecords();
 }
 
@@ -178,8 +181,23 @@ function renderRecordPage() {
   const end = renderPage * PAGE_SIZE;
   const pageRecords = currentFilteredRecords.slice(start, end);
 
-  const html = pageRecords.map(record => `
-    <div class="record-item">
+  const html = pageRecords.map(record => {
+    if (selectionMode) {
+      const checked = selectedRecordIds.indexOf(record.id) >= 0;
+      return `
+    <div class="record-item selectable ${checked ? 'selected' : ''}" onclick="toggleRecordSelection('${record.id}')">
+      <span class="record-check ${checked ? 'on' : ''}"></span>
+      <div class="record-icon">${catIcons[record.category] || '📦'}</div>
+      <div class="record-info">
+        <div class="record-cat">${record.category}${isReward(record) ? '<span class="record-badge">奖励</span>' : ''}</div>
+        <div class="record-note">${record.note || '—'}</div>
+      </div>
+      <div class="record-date">${formatRecordTime(record)}</div>
+      <div class="record-amount ${record.type}">${record.type === 'expense' ? '-' : '+'}¥${formatMoney(record.amount)}</div>
+    </div>`;
+    }
+    return `
+    <div class="record-item" onclick="viewRecord('${record.id}')">
       <div class="record-icon">${catIcons[record.category] || '📦'}</div>
       <div class="record-info">
         <div class="record-cat">${record.category}${isReward(record) ? '<span class="record-badge">奖励</span>' : ''}</div>
@@ -188,11 +206,12 @@ function renderRecordPage() {
       <div class="record-date">${formatRecordTime(record)}</div>
       <div class="record-amount ${record.type}">${record.type === 'expense' ? '-' : '+'}¥${formatMoney(record.amount)}</div>
       <div class="record-actions">
-        <button onclick="editRecord('${record.id}')">编辑</button>
-        <button onclick="deleteRecord('${record.id}')">删除</button>
+        <button onclick="event.stopPropagation();viewRecord('${record.id}')">详情</button>
+        <button onclick="event.stopPropagation();editRecord('${record.id}')">编辑</button>
+        <button onclick="event.stopPropagation();deleteRecord('${record.id}')">删除</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 
   // 还有更多就加个提示
   const hasMore = end < currentFilteredRecords.length;
@@ -201,6 +220,7 @@ function renderRecordPage() {
     : `<div style="text-align:center;padding:12px;color:#c7c7cc;font-size:12px;">— 已经到底了 —</div>`;
 
   list.innerHTML = html + loadMoreHtml;
+  updateSelectionUi();
 }
 
 // 滚动到底部加载更多（.main 才是真正滚动容器）

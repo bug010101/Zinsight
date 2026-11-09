@@ -2,14 +2,14 @@
  * 安卓端 · 事件绑定
  * ES 模块：由 app.js 作为 build:www 的打包入口统一 bundle。
  */
-import { deleteCurrent, hideSheet, openSheet, renderCategoryChips, saveSheet, syncBucketUI, syncTypeUI } from './actions.js';
+import { deleteCurrent, hideSheet, openSheet, renderCategoryChips, saveSheet, syncBucketUI, syncTypeUI, openDetail, closeDetail } from './actions.js';
 import { sendChat } from './chat.js';
 import { Core } from './deps.js';
-import { deleteAll, deleteByRange, exportAllCsv, exportByRange, importCsvText, importFromFile } from './io.js';
+import { deleteAll, deleteByRange, exportAllCsv, exportByRange, exportBill, importCsvText, importFromFile } from './io.js';
 import { addCategory, removeCategory, saveAiConfig, saveBudget, testAiConnection } from './settings.js';
 import { state } from './state.js';
 import { queryElement, queryElements, askText, settleDialog } from './ui.js';
-import { loadMore, renderRecords, setRecordFilter, setView } from './views.js';
+import { loadMore, renderRecords, setRecordFilter, setView, toggleSelectionMode, toggleRecordSelection, selectAllInView, clearSelection } from './views.js';
 
 /* ============================ 事件绑定 ============================ */
 
@@ -84,11 +84,33 @@ export function bindEvents() {
   const handleRecordTap = event => {
     const item = event.target.closest('.record-item');
     if (!item) return;
+    // 多选态下：点击切换勾选；否则打开详情
+    if (state.selectionMode && state.currentView === 'records') {
+      toggleRecordSelection(String(item.dataset.id));
+      return;
+    }
     const currentRecord = state.appData.records.find(record => String(record.id) === String(item.dataset.id));
-    if (currentRecord) openSheet(currentRecord);
+    if (currentRecord) openDetail(currentRecord);
   };
   queryElement('#recordList').addEventListener('click', handleRecordTap);
   queryElement('#recentList').addEventListener('click', handleRecordTap);
+
+  // 记录详情：关闭 / 编辑 / 删除
+  queryElement('#detailClose').addEventListener('click', closeDetail);
+  queryElement('#detailMask').addEventListener('click', event => {
+    if (event.target === queryElement('#detailMask')) closeDetail();
+  });
+  queryElement('#detailEdit').addEventListener('click', () => {
+    const record = state.appData.records.find(record => String(record.id) === String(state.detailId));
+    closeDetail();
+    if (record) openSheet(record);
+  });
+  queryElement('#detailDelete').addEventListener('click', () => {
+    const record = state.appData.records.find(record => String(record.id) === String(state.detailId));
+    if (record) state.editingId = record.id;
+    closeDetail();
+    deleteCurrent();
+  });
 
   // 设置
   queryElement('#btnSaveBudget').addEventListener('click', saveBudget);
@@ -103,6 +125,14 @@ export function bindEvents() {
   queryElement('#btnExportAll').addEventListener('click', exportAllCsv);
   queryElement('#btnExportRangeCsv').addEventListener('click', () => exportByRange('csv'));
   queryElement('#btnExportRangeJson').addEventListener('click', () => exportByRange('json'));
+
+  // 流水多选 + 账单导出
+  queryElement('#btnSelectMode').addEventListener('click', toggleSelectionMode);
+  queryElement('#btnExportBill').addEventListener('click', () => exportBill(false));
+  queryElement('#selAll').addEventListener('click', selectAllInView);
+  queryElement('#selClear').addEventListener('click', clearSelection);
+  queryElement('#selExport').addEventListener('click', () => exportBill(true));
+  queryElement('#selDone').addEventListener('click', toggleSelectionMode);
   queryElement('#btnImportFile').addEventListener('click', () => queryElement('#fileInput').click());
   queryElement('#fileInput').addEventListener('change', event => {
     const file = event.target.files && event.target.files[0];

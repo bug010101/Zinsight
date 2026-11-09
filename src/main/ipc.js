@@ -3,7 +3,7 @@
  * 处理渲染进程和主进程之间的通信
  */
 
-const { ipcMain, dialog } = require('electron');
+const { ipcMain, dialog, BrowserWindow } = require('electron');
 const fs = require('fs');
 const Core = require('../renderer/shared/ledger-core.js');
 const AiContext = require('../renderer/shared/ai/index.js');
@@ -37,6 +37,35 @@ function registerIpc(mainWindow) {
     fs.writeFileSync(result.filePath, Core.buildFullCsv(records), 'utf-8');
     return { success: true, path: result.filePath };
   });
+
+  // 导出 PDF 账单：用离屏窗口加载账单 HTML，调用 Chromium 原生的 printToPDF 生成真正的 .pdf 文件
+  ipcMain.handle('data:exportPdf', async (event, { records, scope }) => {
+    const html = Core.buildBillHtml(records, { scope });
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: '导出账单 PDF',
+      defaultPath: `账单_${new Date().toISOString().slice(0, 10)}.pdf`,
+      filters: [{ name: 'PDF 文件', extensions: ['pdf'] }]
+    });
+    if (result.canceled || !result.filePath) return { success: false, canceled: true };
+    try {
+      const buffer = await renderPdfBuffer(html);
+      fs.writeFileSync(result.filePath, buffer);
+      return { success: true, path: result.filePath };
+    } catch (caughtError) {
+      return { success: false, error: (caughtError && caughtError.message) || '生成 PDF 失败' };
+    }
+  });
+
+  // 离屏窗口渲染账单并生成 PDF Buffer（窗口隐藏，不干扰主界面）
+  async function renderPdfBuffer(htmlContent) {
+    const pdfWindow = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false } });
+    try {
+      await pdfWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(htmlContent));
+      return await pdfWindow.webContents.printToPDF({ printBackground: true, pageSize: 'A4' });
+    } finally {
+      pdfWindow.close();
+    }
+  }
 
   // 按时间范围导出（机器学习用）
   ipcMain.handle('data:exportByRange', async (event, { startDate, endDate, format }) => {

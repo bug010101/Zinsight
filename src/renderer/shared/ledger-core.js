@@ -61,6 +61,20 @@
       + `${padTwoDigits(date.getHours())}:${padTwoDigits(date.getMinutes())}:${padTwoDigits(date.getSeconds())}`;
   }
 
+  /**
+   * 把任意时间戳统一成本地「YYYY-MM-DD HH:mm:ss」（精确到秒）。
+   * 旧数据里 createdAt 可能是 UTC 的 ISO 字符串（由 new Date().toISOString() 产生），
+   * 直接显示会比北京时间晚 8 小时；这里统一成本地字符串，既显示正确，
+   * 也方便字符串比较排序。无法解析时回退到当前本地时间。
+   */
+  function normalizeTimestamp(raw) {
+    const text = String(raw == null ? '' : raw).trim();
+    if (!text) return formatLocalDateTime();
+    const parsed = new Date(text.replace(' ', 'T'));
+    if (isNaN(parsed.getTime())) return formatLocalDateTime();
+    return formatLocalDateTime(parsed);
+  }
+
   /** 2026-11 */
   function monthKey(referenceDate) {
     const date = referenceDate || new Date();
@@ -174,7 +188,7 @@
       date: normalizeDate(source.date) || todayStr(),
       bucket: source.bucket === BUCKET_REWARD ? BUCKET_REWARD : BUCKET_LIFE,
       includeInBalance: source.includeInBalance !== false,
-      createdAt: source.createdAt || new Date().toISOString()
+      createdAt: normalizeTimestamp(source.createdAt)
     };
   }
 
@@ -365,22 +379,20 @@
   }
 
   /**
-   * 列表里显示的时间：以「记账日期」为准
-   *   - 今天的记录：今天 HH:mm
-   *   - 其它日期：MM-DD
-   * 之前这里优先用 createdAt，导致改了记账日期后列表还是显示当天，看着像没改成功。
+   * 列表里显示的日期：只到「日」，不显示时分秒。
+   * 完整的记录时间（精确到秒）只在「查看详情」里展示，避免列表信息过载。
+   * 排序用的完整时间戳是 createdAt，与这里显示的记账日期无关。
    */
   function formatRecordTime(record) {
     const date = record && record.date ? String(record.date) : '';
-    const today = todayStr();
-    let time = '';
-    if (record && record.createdAt) {
-      const referenceDate = new Date(record.createdAt);
-      if (!isNaN(referenceDate.getTime())) time = `${padTwoDigits(referenceDate.getHours())}:${padTwoDigits(referenceDate.getMinutes())}`;
-    }
-    if (!date) return time;
-    if (date === today) return time ? `今天 ${time}` : '今天';
+    if (!date) return '';
+    if (date === todayStr()) return '今天';
     return date.slice(5);
+  }
+
+  /** 详情里展示的完整记录时间（精确到秒），统一成 YYYY-MM-DD HH:mm:ss 本地格式 */
+  function formatFullDateTime(record) {
+    return normalizeTimestamp(record && record.createdAt);
   }
 
   // ========== CSV ==========
@@ -419,6 +431,75 @@
       }, meta || {}),
       records
     }, null, 2);
+  }
+
+  // ========== PDF 账单 ==========
+
+  function htmlEscape(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * 生成账单 PDF 用的 HTML（内联样式，方便打印与系统打印插件复用）。
+   * 两端共用这一份，保证桌面 printToPDF 与安卓 @capacitor/print 出来的账单一致。
+   * records 已经由调用方筛选好（选中的 / 当前筛选结果）。
+   */
+  function buildBillHtml(records, options) {
+    const opts = options || {};
+    const list = (records || []).slice();
+    const totalIncome = list.filter(record => record.type === 'income').reduce((sum, record) => sum + (Number(record.amount) || 0), 0);
+    const totalLife = list.filter(record => record.type === 'expense' && !isReward(record)).reduce((sum, record) => sum + (Number(record.amount) || 0), 0);
+    const totalReward = list.filter(record => isReward(record)).reduce((sum, record) => sum + (Number(record.amount) || 0), 0);
+    const scope = opts.scope || '账单';
+
+    const rows = list.map(record => `
+      <tr>
+        <td>${htmlEscape(record.date)}</td>
+        <td>${record.type === 'income' ? '收入' : '支出'}</td>
+        <td>${htmlEscape(record.category)}</td>
+        <td class="num">${(record.type === 'income' ? '+' : '-') + formatMoney(record.amount)}</td>
+        <td>${htmlEscape(record.note || '')}</td>
+        <td>${htmlEscape(bucketLabel(record))}</td>
+      </tr>`).join('');
+
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Zinsight ${htmlEscape(scope)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #1d1d1f; margin: 32px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .meta { color: #86868b; font-size: 13px; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e6e6ea; vertical-align: top; }
+  th { background: #f5f5f7; font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .summary { margin-top: 18px; font-size: 14px; }
+  .summary span { margin-right: 20px; white-space: nowrap; }
+  .footer { margin-top: 24px; color: #c7c7cc; font-size: 12px; }
+</style>
+</head>
+<body>
+  <h1>Zinsight ${htmlEscape(scope)}</h1>
+  <div class="meta">导出时间：${formatLocalDateTime()} ｜ 共 ${list.length} 笔记录</div>
+  <table>
+    <thead><tr><th>记账日期</th><th>类型</th><th>分类</th><th style="text-align:right;">金额</th><th>备注</th><th>归属</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#86868b;">没有记录</td></tr>'}</tbody>
+  </table>
+  <div class="summary">
+    <span>收入合计：¥${formatMoney(totalIncome)}</span>
+    <span>生活支出：¥${formatMoney(totalLife)}</span>
+    <span>奖励支出：¥${formatMoney(totalReward)}</span>
+  </div>
+  <div class="footer">数据全部保存在本机 · 由 Zinsight 生成</div>
+</body>
+</html>`;
   }
 
   /** 筛选某个时间范围的记录（升序） */
@@ -486,21 +567,20 @@
         note: get(colIdx.note),
         bucket: accountRaw === 'reward' || accountRaw === '奖励' ? BUCKET_REWARD : BUCKET_LIFE,
         includeInBalance: includeRaw !== 'false' && includeRaw !== '0',
-        createdAt: new Date().toISOString()
+        createdAt: ''
       });
     }
 
     if (!records.length) return { success: false, error: '没有解析到有效记录' };
 
-    // 导入的历史记录没有精确创建时间，按「记账日期 + CSV 行序」给每条补一个 createdAt。
-    // 否则所有记录都是导入这一刻、完全相等，列表排序会退化成依赖 CSV 文件顺序，
-    // 出现「最新的却显示在最底下」之类的错乱。
-    records.forEach((record, index) => {
-      const base = new Date(`${record.date}T12:00:00`);
-      if (!isNaN(base.getTime())) {
-        base.setSeconds(base.getSeconds() + index);
-        record.createdAt = base.toISOString();
-      }
+    // 导入顺序修复：createdAt 与「记账日期」解耦，改为按 CSV 行序递增的本地完整时间戳
+    // （精确到秒）。这样列表按 createdAt 倒序时，导入的记录自然以 CSV 里的先后排列，
+    // 不会再被「记账日期」重新洗牌（之前锚定在记账日期 + 秒偏移，不同日期的记录
+    // 会被日期重新排序，导致导入顺序丢失）。当前录入的记录也用同样的本地时间戳，两端一致。
+    const importBase = new Date();
+    records.forEach((record, rowIndex) => {
+      importBase.setSeconds(importBase.getSeconds() + 1);
+      record.createdAt = formatLocalDateTime(importBase);
     });
 
     return { success: true, records };
@@ -555,6 +635,7 @@
     BUCKET_LIFE, BUCKET_REWARD, BUCKET_LABEL,
     // 日期
     todayStr, monthKey, monthStartStr, daysInMonth, lastMonths, normalizeDate, formatLocalDateTime,
+    normalizeTimestamp, formatFullDateTime,
     // 基础
     padTwoDigits, formatMoney, generateId, categoryIcon, defaultData, defaultConfig, normalize,
     isReward, bucketOf, bucketLabel,
@@ -564,7 +645,7 @@
     // 流水
     sortRecords, formatRecordTime,
     // CSV
-    buildFullCsv, buildRangeCsv, buildRangeJson, filterByRange, parseCsv,
+    buildFullCsv, buildRangeCsv, buildRangeJson, buildBillHtml, filterByRange, parseCsv,
     // AI 配置
     normalizeAiEndpoint, formatAiError
   };

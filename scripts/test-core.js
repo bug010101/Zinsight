@@ -272,6 +272,50 @@ test('AI 错误：非 JSON 响应给出报文片段，空响应给出兜底提�
   assert.ok(Core.formatAiError(401, '').includes('请检查接口地址'));
 });
 
+// ========== 完整时间戳 + 导入顺序 ==========
+
+test('normalizeTimestamp 归一为本地「YYYY-MM-DD HH:mm:ss」', () => {
+  // 无时区后缀的本地字符串，按本地解析后原样归一（不涉及时区，结果确定）
+  assert.strictEqual(Core.normalizeTimestamp('2026-11-08 12:34:56'), '2026-11-08 12:34:56');
+  // 坏值回退到当前本地时间（格式仍正确）
+  assert.strictEqual(Core.normalizeTimestamp('not-a-date'), Core.formatLocalDateTime());
+});
+
+test('formatFullDateTime 返回完整秒级时间，详情里展示', () => {
+  assert.strictEqual(Core.formatFullDateTime({ createdAt: '2026-11-08 12:34:56' }), '2026-11-08 12:34:56');
+  assert.strictEqual(Core.formatFullDateTime({}), Core.formatLocalDateTime());
+});
+
+test('parseCsv 导入顺序：列表按 createdAt 倒序即 CSV 行序（不被记账日期洗牌）', () => {
+  // 三行日期故意乱序：01-05 / 03-01 / 02-15，若按 date 排序会变成 a/b/c
+  const csv = [
+    '日期,类型,分类,金额,备注',
+    '2026-01-05,支出,餐饮,10,a',
+    '2026-03-01,支出,餐饮,20,b',
+    '2026-02-15,支出,餐饮,30,c'
+  ].join('\n');
+  const parsed = Core.parseCsv(csv);
+  assert.strictEqual(parsed.success, true);
+  // createdAt 按行递增（与记账日期解耦），倒序后应为 c -> b -> a（即 CSV 录入顺序）
+  const sorted = Core.sortRecords(parsed.records, '');
+  assert.deepStrictEqual(sorted.map(record => record.note), ['c', 'b', 'a']);
+});
+
+// ========== PDF 账单 HTML ==========
+
+test('buildBillHtml 生成含标题与合计的账单 HTML', () => {
+  const html = Core.buildBillHtml(sample, { scope: '测试账单' });
+  assert.ok(html.includes('测试账单'));
+  assert.ok(html.includes('<table>'));
+  assert.ok(html.includes('记账日期'));
+  assert.ok(html.includes('收入合计'));
+  assert.ok(html.includes('生活支出'));
+  assert.ok(html.includes('奖励支出'));
+  // 没有任何记录时也能生成（不报错、显示空态）
+  const empty = Core.buildBillHtml([], { scope: '空' });
+  assert.ok(empty.includes('没有记录'));
+});
+
 // ---------- Markdown 渲染（AI 回复，两端共用） ----------
 
 test('Markdown：标题、粗体、斜体、删除线', () => {

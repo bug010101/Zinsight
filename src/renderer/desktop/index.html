@@ -138,6 +138,17 @@
     <div class="search-bar" style="border-radius:12px;margin-bottom:12px;">
       <input type="text" id="searchInput" placeholder="搜索备注、分类..." oninput="renderRecords()">
     </div>
+    <div class="records-toolbar">
+      <button class="btn btn-secondary" id="btnSelectMode" onclick="toggleSelectionMode()">多选</button>
+      <button class="btn btn-secondary" onclick="exportAllPdf()">导出全部 PDF</button>
+    </div>
+    <div class="selection-bar" id="selectionBar" style="display:none;">
+      <span class="sel-count" id="selectionCount">已选 0 条</span>
+      <button class="btn btn-secondary" onclick="selectAllInView()">全选</button>
+      <button class="btn btn-secondary" onclick="clearSelection()">清空</button>
+      <button class="btn btn-primary" onclick="exportSelectedPdf()">导出选中 PDF</button>
+      <button class="btn btn-secondary" onclick="toggleSelectionMode()">完成</button>
+    </div>
     <div class="record-list" id="recordList"></div>
   </div>
 
@@ -324,6 +335,17 @@
   </div>
 </div>
 
+<!-- 记录详情弹窗 -->
+<div class="modal-mask" id="detailModal">
+  <div class="modal">
+    <h3>记录详情</h3>
+    <div class="detail-rows" id="detailRows"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeDetailModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
 <!-- 共享内核（纯函数，两端唯一实现） -->
 <script src="../shared/ledger-core.js"></script>
 <script src="../shared/markdown.js"></script>
@@ -336,6 +358,7 @@
 <script src="./views.js"></script>
 <script src="./charts.js"></script>
 <script src="./actions.js"></script>
+<script src="./selection.js"></script>
 <script src="./settings.js"></script>
 <script src="./chat.js"></script>
 <script src="./app.js"></script>

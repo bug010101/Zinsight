@@ -19,6 +19,8 @@ let currentType = 'expense';
 let currentBucket = 'life';   // 'life' 生活消费 | 'reward' 奖励消费
 let editingId = null;
 let recordFilter = 'all';
+let selectionMode = false;
+let selectedRecordIds = [];
 let chatHistory = [];      // 最近几轮对话，仅用于追问指代，不落盘、不外发额外服务
 let lastAiScope = null;    // 上一轮问的是哪套账，用于「另一套呢」
 

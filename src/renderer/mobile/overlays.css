@@ -238,6 +238,20 @@
 
 .hidden { display: none !important; }
 
+/* 记录详情 */
+#detailRows { margin: 6px 0 4px; }
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--outline, #eceef2);
+  font-size: 14px;
+}
+.detail-row:last-child { border-bottom: none; }
+.detail-label { color: var(--on-surface-var, #86868b); flex-shrink: 0; }
+.detail-value { color: var(--on-surface, #1d1d1f); font-weight: 600; text-align: right; word-break: break-all; }
+
 /* 文件选择器不能用 display:none：部分 Android WebView 会因此不触发
    onShowFileChooser，点击「选择文件」将毫无反应。改成视觉隐藏但保留元素。 */
 .file-input {

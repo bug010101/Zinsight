@@ -112,6 +112,17 @@
         </svg>
         <input type="text" id="searchInput" placeholder="搜索备注、分类…">
       </div>
+      <div class="records-toolbar">
+        <button class="btn btn-outline" id="btnSelectMode">多选</button>
+        <button class="btn btn-outline" id="btnExportBill">导出账单</button>
+      </div>
+      <div class="selection-bar" id="selectionBar" style="display:none;">
+        <span class="sel-count" id="selectionCount">已选 0 条</span>
+        <button class="btn btn-tonal" id="selAll">全选</button>
+        <button class="btn btn-tonal" id="selClear">清空</button>
+        <button class="btn btn-filled" id="selExport">导出选中</button>
+        <button class="btn btn-tonal" id="selDone">完成</button>
+      </div>
       <div class="card">
         <div class="record-list" id="recordList"></div>
       </div>
@@ -378,6 +389,19 @@
     <div class="dialog-actions">
       <button id="dialogCancel">取消</button>
       <button id="dialogOk" class="danger">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 记录详情 ================= -->
+<div class="dialog-mask" id="detailMask">
+  <div class="dialog" id="detailDialog">
+    <h3>记录详情</h3>
+    <div id="detailRows"></div>
+    <div class="dialog-actions">
+      <button id="detailClose">关闭</button>
+      <button id="detailEdit">编辑</button>
+      <button id="detailDelete" class="danger">删除</button>
     </div>
   </div>
 </div>

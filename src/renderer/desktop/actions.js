@@ -82,7 +82,7 @@ async function addRecord() {
       amount, category, note, date,
       bucket: currentType === 'income' ? 'life' : currentBucket,
       includeInBalance,
-      createdAt: new Date().toISOString()
+      createdAt: Core.formatLocalDateTime()
     });
   }
 
@@ -171,6 +171,8 @@ function closeEditModal() {
   document.getElementById('editModal').classList.remove('show');
   editingRecordId = null;
 }
+
+// ========== 记录详情（在 selection.js） ==========
 
 async function saveEdit() {
   const amount = parseFloat(document.getElementById('editAmount').value);
